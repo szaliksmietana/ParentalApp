@@ -13,45 +13,39 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    onNavigateToMap: () -> Unit,
+    onNavigateToPairing: () -> Unit, // Zmieniony parametr na parowanie
     onNavigateToChat: () -> Unit,
-    onNavigateToAddChild: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onLogoutClick: () -> Unit // Nowy parametr do obsługi wylogowania
+    onLogoutClick: () -> Unit
 ) {
-    // Scaffold to specjalny układ w Compose, który ułatwia dodawanie
-    // górnego paska (TopAppBar), dolnego menu czy wysuwanych szuflad.
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Panel Rodzica") },
+                title = { Text("Panel Dziecka") },
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
-                        // Gotowa ikona zębatki z biblioteki Material Design
                         Icon(Icons.Filled.Settings, contentDescription = "Ustawienia")
                     }
                     IconButton(onClick = onLogoutClick) {
-                        // Ikona wyjścia / wylogowania
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Wyloguj się")
                     }
                 }
             )
         }
     ) { paddingValues ->
-        // Właściwa zawartość ekranu (przyciski)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues) // Ważne: robi margines na górny pasek
+                .padding(paddingValues)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Button(
-                onClick = onNavigateToMap,
+                onClick = onNavigateToPairing,
                 modifier = Modifier.fillMaxWidth().height(60.dp)
             ) {
-                Text("Mapa (Lokalizacja)")
+                Text("Parowanie z rodzicem")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -61,15 +55,6 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().height(60.dp)
             ) {
                 Text("Czat")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = onNavigateToAddChild,
-                modifier = Modifier.fillMaxWidth().height(60.dp)
-            ) {
-                Text("Dodaj dziecko")
             }
         }
     }

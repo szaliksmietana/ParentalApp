@@ -56,6 +56,8 @@ dependencies {
     // Darmowe Mapy: OSMdroid
     implementation("org.osmdroid:osmdroid-android:6.1.20")
 
+    // Usługi lokalizacji (Przywrócone dla śledzenia GPS)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // JWT Utility
     implementation("com.auth0.android:jwtdecode:2.0.2")

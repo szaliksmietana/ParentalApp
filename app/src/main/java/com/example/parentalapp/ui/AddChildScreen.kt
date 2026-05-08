@@ -3,27 +3,27 @@ package com.example.parentalapp.ui
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddChildScreen(onNavigateBack: () -> Unit) {
-    // Stan przechowujący wpisany kod (maksymalnie 6 znaków)
-    var code by remember { mutableStateOf("") }
+    // Generujemy losowy 6-cyfrowy kod przy otwarciu ekranu (tylko raz)
+    val generatedCode by remember {
+        mutableStateOf(Random.nextInt(100000, 999999).toString())
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Dodaj dziecko") },
+                title = { Text("Parowanie z rodzicem") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Wróć")
@@ -41,58 +41,49 @@ fun AddChildScreen(onNavigateBack: () -> Unit) {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Wprowadź 6-cyfrowy kod z urządzenia dziecka",
-                style = MaterialTheme.typography.titleMedium
+                text = "Twój kod parowania",
+                style = MaterialTheme.typography.titleLarge
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Niewidzialne pole tekstowe, które rysuje 6 prostokątów
-            BasicTextField(
-                value = code,
-                onValueChange = {
-                    // Pozwalamy tylko na cyfry i max 6 znaków
-                    if (it.length <= 6) code = it.filter { char -> char.isDigit() }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                decorationBox = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        repeat(6) { index ->
-                            val char = if (index < code.length) code[index].toString() else ""
-
-                            // Pojedynczy prostokąt
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(0.8f)
-                                    .border(
-                                        width = 2.dp,
-                                        color = if (index == code.length) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                        shape = RoundedCornerShape(8.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = char, style = MaterialTheme.typography.headlineMedium)
-                            }
-                        }
-                    }
-                }
+            Text(
+                text = "Przekaż ten kod rodzicowi, aby połączyć konta.",
+                style = MaterialTheme.typography.bodyMedium
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
-                onClick = {
-                    // Tutaj w przyszłości poleci zapytanie Retrofit do FastAPI
-                },
-                enabled = code.length == 6, // Przycisk aktywny tylko gdy wpisano 6 cyfr
-                modifier = Modifier.fillMaxWidth().height(50.dp)
+            // Rysowanie 6 prostokątów z wygenerowanym kodem
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Dodaj przypisanie")
+                repeat(6) { index ->
+                    val char = generatedCode[index].toString()
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(0.8f)
+                            .border(
+                                width = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(8.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = char, style = MaterialTheme.typography.headlineMedium)
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // Animacja ładowania symulująca oczekiwanie na potwierdzenie od serwera
+            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Oczekiwanie na rodzica...", color = MaterialTheme.colorScheme.secondary)
         }
     }
 }
