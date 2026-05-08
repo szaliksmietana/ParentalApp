@@ -8,11 +8,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.example.parentalapp.ui.AddChildScreen
 import com.example.parentalapp.ui.ChatScreen
 import com.example.parentalapp.ui.DashboardScreen
 import com.example.parentalapp.ui.LoginScreen
 import com.example.parentalapp.ui.MapScreen
-import com.example.parentalapp.ui.SettingsScreen // Pamiętaj o tym imporcie!
+import com.example.parentalapp.ui.SettingsScreen
 
 // Lista dostępnych ekranów w naszej aplikacji
 enum class AppScreen {
@@ -37,46 +38,35 @@ class MainActivity : ComponentActivity() {
                 AppScreen.Dashboard -> {
                     DashboardScreen(
                         onNavigateToMap = { currentScreen = AppScreen.Map },
-                        onNavigateToChat = {
-                            currentScreen = AppScreen.Chat
-                        },
-                        onNavigateToAddChild = {
-                            Toast.makeText(this, "Tu zrobimy dodawanie", Toast.LENGTH_SHORT).show()
-                        },
-                        onNavigateToSettings = {
-                            // Przejście do ekranu Ustawień
-                            currentScreen = AppScreen.Settings
+                        onNavigateToChat = { currentScreen = AppScreen.Chat },
+                        onNavigateToAddChild = { currentScreen = AppScreen.AddChild },
+                        onNavigateToSettings = { currentScreen = AppScreen.Settings },
+                        onLogoutClick = {
+                            // Obsługa wylogowania z poziomu ekranu głównego
+                            currentScreen = AppScreen.Login
                         }
                     )
                 }
                 AppScreen.Map -> {
                     MapScreen(
-                        onNavigateBack = {
-                            currentScreen = AppScreen.Dashboard
-                        }
+                        onNavigateBack = { currentScreen = AppScreen.Dashboard }
                     )
                 }
                 AppScreen.Chat -> {
                     ChatScreen(
-                        onNavigateBack = {
-                            currentScreen = AppScreen.Dashboard
-                        }
+                        onNavigateBack = { currentScreen = AppScreen.Dashboard }
+                    )
+                }
+                AppScreen.AddChild -> {
+                    AddChildScreen(
+                        onNavigateBack = { currentScreen = AppScreen.Dashboard }
                     )
                 }
                 AppScreen.Settings -> {
                     SettingsScreen(
-                        onNavigateBack = {
-                            // Po kliknięciu strzałki wstecz, wracamy do Panelu
-                            currentScreen = AppScreen.Dashboard
-                        },
-                        onLogoutClick = {
-                            // Wylogowanie - powrót na ekran logowania
-                            currentScreen = AppScreen.Login
-                        }
+                        onNavigateBack = { currentScreen = AppScreen.Dashboard },
+                        onLogoutClick = { currentScreen = AppScreen.Login }
                     )
-                }
-                else -> {
-                    // Pozostałe ekrany uzupełnimy później
                 }
             }
         }

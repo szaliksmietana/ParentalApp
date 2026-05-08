@@ -2,6 +2,7 @@ package com.example.parentalapp.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -15,7 +16,8 @@ fun DashboardScreen(
     onNavigateToMap: () -> Unit,
     onNavigateToChat: () -> Unit,
     onNavigateToAddChild: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onLogoutClick: () -> Unit // Nowy parametr do obsługi wylogowania
 ) {
     // Scaffold to specjalny układ w Compose, który ułatwia dodawanie
     // górnego paska (TopAppBar), dolnego menu czy wysuwanych szuflad.
@@ -27,6 +29,10 @@ fun DashboardScreen(
                     IconButton(onClick = onNavigateToSettings) {
                         // Gotowa ikona zębatki z biblioteki Material Design
                         Icon(Icons.Filled.Settings, contentDescription = "Ustawienia")
+                    }
+                    IconButton(onClick = onLogoutClick) {
+                        // Ikona wyjścia / wylogowania
+                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Wyloguj się")
                     }
                 }
             )
