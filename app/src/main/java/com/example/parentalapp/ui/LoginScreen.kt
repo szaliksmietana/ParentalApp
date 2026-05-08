@@ -9,7 +9,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun LoginScreen(onLoginClick: (String, String) -> Unit) {
+fun LoginScreen(
+    onLoginClick: (String, String) -> Unit,
+    onRegisterClick: () -> Unit // Nowy parametr wywołujący przejście
+) {
     // Stany przechowujące to, co użytkownik wpisze w pola tekstowe
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -52,6 +55,16 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Zaloguj się")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Nowy przycisk do rejestracji
+        TextButton(
+            onClick = onRegisterClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Nie masz konta? Załóż konto")
         }
     }
 }
