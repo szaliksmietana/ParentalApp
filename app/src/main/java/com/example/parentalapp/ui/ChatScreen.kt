@@ -24,28 +24,26 @@ fun ChatScreen(onNavigateBack: () -> Unit) {
     // Stan dla wpisywanej wiadomości
     var currentMessage by remember { mutableStateOf("") }
 
-    // Stan dla listy wiadomości (na start dajemy dwie testowe)
+    // Stan dla listy wiadomości (testowe)
     var messages by remember {
         mutableStateOf(listOf(
-            ChatMessage("Cześć, wszystko w porządku?", true),
-            ChatMessage("Tak, wracam już do domu!", false)
+            ChatMessage("Cześć, wszystko w porządku?", true), // Od rodzica (po lewej, szare)
+            ChatMessage("Tak, wracam już do domu!", false)    // Od dziecka (po prawej, kolorowe)
         ))
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Czat z dzieckiem") },
+                title = { Text("Czat z rodzicem") }, // Zmieniony tytuł
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        // Automirrored zapewnia poprawne odwrócenie strzałki w językach czytanych od prawej do lewej
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Wróć")
                     }
                 }
             )
         },
         bottomBar = {
-            // Pasek wpisywania wiadomości na dole ekranu
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -63,8 +61,8 @@ fun ChatScreen(onNavigateBack: () -> Unit) {
                 IconButton(
                     onClick = {
                         if (currentMessage.isNotBlank()) {
-                            // Dodajemy nową wiadomość do listy i czyścimy pole
-                            messages = messages + ChatMessage(currentMessage, true)
+                            // Dziecko wysyła wiadomość, więc isFromParent = false
+                            messages = messages + ChatMessage(currentMessage, false)
                             currentMessage = ""
                         }
                     },
@@ -75,13 +73,12 @@ fun ChatScreen(onNavigateBack: () -> Unit) {
             }
         }
     ) { paddingValues ->
-        // Lista wiadomości
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp), // Odstępy między dymkami
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
             items(messages) { message ->
@@ -94,10 +91,10 @@ fun ChatScreen(onNavigateBack: () -> Unit) {
 // Komponent pojedynczego "dymka" z wiadomością
 @Composable
 fun ChatBubble(message: ChatMessage) {
-    // Wyrównanie: prawe dla rodzica, lewe dla dziecka
-    val alignment = if (message.isFromParent) Alignment.CenterEnd else Alignment.CenterStart
-    val backgroundColor = if (message.isFromParent) MaterialTheme.colorScheme.primary else Color.LightGray
-    val textColor = if (message.isFromParent) Color.White else Color.Black
+    // Odwrócona logika: jeśli to rodzic (true), to po lewej; jeśli dziecko (false), to po prawej
+    val alignment = if (message.isFromParent) Alignment.CenterStart else Alignment.CenterEnd
+    val backgroundColor = if (message.isFromParent) Color.LightGray else MaterialTheme.colorScheme.primary
+    val textColor = if (message.isFromParent) Color.Black else Color.White
 
     Box(
         modifier = Modifier.fillMaxWidth(),
