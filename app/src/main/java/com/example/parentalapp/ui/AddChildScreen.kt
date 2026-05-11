@@ -16,8 +16,11 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddChildScreen(onNavigateBack: () -> Unit) {
-    // Stan przechowujący wpisany kod (maksymalnie 6 znaków)
+fun AddChildScreen(
+    onNavigateBack: () -> Unit,
+    onChildAdded: (String, String) -> Unit // Zwraca Imię i Kod
+) {
+    var name by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
 
     Scaffold(
@@ -40,18 +43,26 @@ fun AddChildScreen(onNavigateBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            // Nowe pole: Imię dziecka
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Imię dziecka") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Text(
                 text = "Wprowadź 6-cyfrowy kod z urządzenia dziecka",
                 style = MaterialTheme.typography.titleMedium
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Niewidzialne pole tekstowe, które rysuje 6 prostokątów
             BasicTextField(
                 value = code,
                 onValueChange = {
-                    // Pozwalamy tylko na cyfry i max 6 znaków
                     if (it.length <= 6) code = it.filter { char -> char.isDigit() }
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -62,8 +73,6 @@ fun AddChildScreen(onNavigateBack: () -> Unit) {
                     ) {
                         repeat(6) { index ->
                             val char = if (index < code.length) code[index].toString() else ""
-
-                            // Pojedynczy prostokąt
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -85,10 +94,8 @@ fun AddChildScreen(onNavigateBack: () -> Unit) {
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
-                onClick = {
-                    // Tutaj w przyszłości poleci zapytanie Retrofit do FastAPI
-                },
-                enabled = code.length == 6, // Przycisk aktywny tylko gdy wpisano 6 cyfr
+                onClick = { onChildAdded(name, code) },
+                enabled = name.isNotBlank() && code.length == 6, // Wymaga imienia i 6 cyfr
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
                 Text("Dodaj przypisanie")
