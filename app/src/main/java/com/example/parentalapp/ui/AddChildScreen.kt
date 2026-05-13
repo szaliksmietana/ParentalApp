@@ -17,10 +17,12 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddChildScreen(
+    guardianDeviceId: String,
     onNavigateBack: () -> Unit,
-    onChildAdded: (String, String) -> Unit // Zwraca Imię i Kod
+    onPairingConfirmed: (code: String) -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null
 ) {
-    var name by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
 
     Scaffold(
@@ -43,22 +45,20 @@ fun AddChildScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Nowe pole: Imię dziecka
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Imię dziecka") },
-                modifier = Modifier.fillMaxWidth()
+            Text(
+                text = "Wprowadź 6-cyfrowy kod",
+                style = MaterialTheme.typography.headlineSmall
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Wprowadź 6-cyfrowy kod z urządzenia dziecka",
-                style = MaterialTheme.typography.titleMedium
+                text = "Poproś dziecko o kod wyświetlony w jego aplikacji",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             BasicTextField(
                 value = code,
@@ -79,7 +79,10 @@ fun AddChildScreen(
                                     .aspectRatio(0.8f)
                                     .border(
                                         width = 2.dp,
-                                        color = if (index == code.length) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        color = if (index == code.length)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.outline,
                                         shape = RoundedCornerShape(8.dp)
                                     ),
                                 contentAlignment = Alignment.Center
@@ -91,14 +94,35 @@ fun AddChildScreen(
                 }
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (errorMessage != null) {
+                Text(
+                    text = errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = { onChildAdded(name, code) },
-                enabled = name.isNotBlank() && code.length == 6, // Wymaga imienia i 6 cyfr
-                modifier = Modifier.fillMaxWidth().height(50.dp)
+                onClick = { onPairingConfirmed(code) },
+                enabled = code.length == 6 && !isLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
             ) {
-                Text("Dodaj przypisanie")
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Potwierdź parowanie")
+                }
             }
         }
     }

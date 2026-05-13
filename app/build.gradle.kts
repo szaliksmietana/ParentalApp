@@ -6,26 +6,26 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val properties = Properties()
-val localPropertiesFile = project.rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    properties.load(localPropertiesFile.inputStream())
+val localProperties = Properties().also { props ->
+    val file = rootProject.file("local.properties")
+    if (file.exists()) props.load(file.inputStream())
+}
 
 android {
     namespace = "com.example.parentalapp"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.parentalapp"
         minSdk = 30
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val baseUrl = properties.getProperty("API_BASE_URL") ?: "\"http://10.0.2.2:2244/\""
-        buildConfigField("String", "BASE_URL", baseUrl)
+        val baseUrl = localProperties.getProperty("API_BASE_URL") ?: "http://10.0.2.2:2244/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {
@@ -48,7 +48,6 @@ android {
 }
 
 dependencies {
-    // Core & Compose
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
@@ -59,21 +58,15 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("com.google.android.material:material:1.13.0")
 
-    // Networking (Retrofit + Gson dla komunikacji z Python/FastAPI)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Darmowe Mapy: OSMdroid
     implementation("org.osmdroid:osmdroid-android:6.1.20")
 
-
-    // JWT Utility
     implementation("com.auth0.android:jwtdecode:2.0.2")
 
-    // Testy
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
-}
 }

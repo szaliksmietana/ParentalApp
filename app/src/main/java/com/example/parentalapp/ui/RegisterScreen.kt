@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
-    onRegisterClick: (String, String, String) -> Unit,
+    onRegisterClick: (String, String, String) -> Unit, // email, password, username
     onNavigateBack: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
@@ -42,10 +42,7 @@ fun RegisterScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Rejestracja Rodzica",
-                style = MaterialTheme.typography.headlineMedium
-            )
+            Text("Rejestracja Rodzica", style = MaterialTheme.typography.headlineMedium)
 
             Spacer(modifier = Modifier.height(32.dp))
 
@@ -97,7 +94,9 @@ fun RegisterScreen(
                     text = errorMessage!!,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp).fillMaxWidth()
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .fillMaxWidth()
                 )
             }
 
@@ -105,18 +104,19 @@ fun RegisterScreen(
 
             Button(
                 onClick = {
-                    if (password.isBlank() || email.isBlank() || username.isBlank()) {
-                        errorMessage = "Wypełnij wszystkie pola!"
-                    } else if (password.length < 8) {
-                        // NOWY WARUNEK: Blokujemy hasła krótsze niż 8 znaków w samej aplikacji
-                        errorMessage = "Hasło musi mieć minimum 8 znaków!"
-                    } else if (password != confirmPassword) {
-                        errorMessage = "Hasła nie są identyczne!"
-                    } else {
-                        onRegisterClick(email, password, username)
+                    when {
+                        username.isBlank() || email.isBlank() || password.isBlank() ->
+                            errorMessage = "Wypełnij wszystkie pola!"
+                        password.length < 8 ->
+                            errorMessage = "Hasło musi mieć minimum 8 znaków!"
+                        password != confirmPassword ->
+                            errorMessage = "Hasła nie są identyczne!"
+                        else -> onRegisterClick(email, password, username)
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
             ) {
                 Text("Zarejestruj się")
             }
