@@ -25,7 +25,6 @@ import com.example.parentalapp.ui.MapScreen
 import com.example.parentalapp.ui.RegisterScreen
 import com.example.parentalapp.ui.SettingsScreen
 
-// Prosty model przechowujący dane sparowanego dziecka
 data class ChildData(val name: String, val code: String)
 
 enum class AppScreen {
@@ -38,26 +37,26 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var currentScreen by remember { mutableStateOf(AppScreen.Login) }
-            // Stan przechowujący listę dodanych dzieci
             var childrenList by remember { mutableStateOf(listOf<ChildData>()) }
+            // Stan przechowujący dziecko, które właśnie kliknęliśmy (null oznacza "wszystkie dzieci")
+            var selectedChild by remember { mutableStateOf<ChildData?>(null) }
+
             val context = LocalContext.current
 
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission()
-            ) { isGranted ->
-                // Obsługa zgody na powiadomienia
-            }
+            ) { _ -> }
 
             when (currentScreen) {
                 AppScreen.Login -> {
                     LoginScreen(
-                        onLoginClick = { email, password -> currentScreen = AppScreen.Dashboard },
+                        onLoginClick = { _, _ -> currentScreen = AppScreen.Dashboard },
                         onRegisterClick = { currentScreen = AppScreen.Register }
                     )
                 }
                 AppScreen.Register -> {
                     RegisterScreen(
-                        onRegisterClick = { email, password -> currentScreen = AppScreen.Dashboard },
+                        onRegisterClick = { _, _ -> currentScreen = AppScreen.Dashboard },
                         onNavigateBack = { currentScreen = AppScreen.Login }
                     )
                 }
@@ -70,20 +69,36 @@ class MainActivity : ComponentActivity() {
                     }
 
                     DashboardScreen(
-                        childrenList = childrenList, // Przekazanie listy
-                        onNavigateToMap = { currentScreen = AppScreen.Map },
-                        onNavigateToChat = { currentScreen = AppScreen.Chat },
+                        childrenList = childrenList,
+                        onNavigateToMap = { child ->
+                            selectedChild = child
+                            currentScreen = AppScreen.Map
+                        },
+                        onNavigateToAllMap = { // NOWE: Przycisk z górnego paska
+                            selectedChild = null // null oznacza, że chcemy zobaczyć wszystkich
+                            currentScreen = AppScreen.Map
+                        },
+                        onNavigateToChat = { child ->
+                            selectedChild = child
+                            currentScreen = AppScreen.Chat
+                        },
                         onNavigateToAddChild = { currentScreen = AppScreen.AddChild },
                         onNavigateToSettings = { currentScreen = AppScreen.Settings },
                         onLogoutClick = { currentScreen = AppScreen.Login }
                     )
                 }
                 AppScreen.Map -> {
-                    MapScreen(onNavigateBack = { currentScreen = AppScreen.Dashboard })
+                    // Przekazujemy listę i ewentualnie wybrane dziecko
+                    MapScreen(
+                        childrenList = childrenList,
+                        selectedChild = selectedChild,
+                        onNavigateBack = { currentScreen = AppScreen.Dashboard }
+                    )
                 }
                 AppScreen.Chat -> {
                     ChatScreen(
-                        childrenList = childrenList, // Przekazanie listy
+                        childrenList = childrenList,
+                        initialChild = selectedChild,
                         onNavigateBack = { currentScreen = AppScreen.Dashboard }
                     )
                 }
@@ -91,7 +106,6 @@ class MainActivity : ComponentActivity() {
                     AddChildScreen(
                         onNavigateBack = { currentScreen = AppScreen.Dashboard },
                         onChildAdded = { name, code ->
-                            // Dodajemy dziecko, pokazujemy Toast i wracamy
                             childrenList = childrenList + ChildData(name, code)
                             Toast.makeText(context, "Dodano $name", Toast.LENGTH_SHORT).show()
                             currentScreen = AppScreen.Dashboard
@@ -111,9 +125,7 @@ class MainActivity : ComponentActivity() {
     private fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = "geofence_alerts"
-            val channel = NotificationChannel(channelId, "Alerty lokalizacji", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Powiadomienia o opuszczeniu bezpiecznej strefy przez dziecko"
-            }
+            val channel = NotificationChannel(channelId, "Alerty lokalizacji", NotificationManager.IMPORTANCE_HIGH)
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }

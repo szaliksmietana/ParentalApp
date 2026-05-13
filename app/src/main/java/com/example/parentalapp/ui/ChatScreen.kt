@@ -23,15 +23,16 @@ data class ChatMessage(val text: String, val isFromParent: Boolean)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    childrenList: List<ChildData>, // Odbieramy listę
+    childrenList: List<ChildData>,
+    initialChild: ChildData?, // NOWE: Dziecko wybrane z Dashboardu
     onNavigateBack: () -> Unit
 ) {
     var currentMessage by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
-
-    // Stan do rozwijanego menu
     var expanded by remember { mutableStateOf(false) }
-    var selectedChild by remember { mutableStateOf(childrenList.firstOrNull()) }
+
+    // Ustawiamy wybrane dziecko jako startowe
+    var selectedChild by remember { mutableStateOf(initialChild ?: childrenList.firstOrNull()) }
 
     Scaffold(
         topBar = {
@@ -47,17 +48,14 @@ fun ChatScreen(
                                 Icon(Icons.Filled.ArrowDropDown, contentDescription = "Rozwiń")
                             }
                         }
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                             childrenList.forEach { child ->
                                 DropdownMenuItem(
                                     text = { Text(child.name) },
                                     onClick = {
                                         selectedChild = child
                                         expanded = false
-                                        messages = emptyList() // Opcjonalnie: czyścimy czat po zmianie dziecka
+                                        messages = emptyList()
                                     }
                                 )
                             }
@@ -72,17 +70,14 @@ fun ChatScreen(
             )
         },
         bottomBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = currentMessage,
                     onValueChange = { currentMessage = it },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Napisz wiadomość...") },
                     shape = RoundedCornerShape(24.dp),
-                    enabled = selectedChild != null // Zablokuj, jeśli brak dziecka
+                    enabled = selectedChild != null
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
@@ -113,9 +108,7 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                items(messages) { message ->
-                    ChatBubble(message = message)
-                }
+                items(messages) { message -> ChatBubble(message = message) }
             }
         }
     }
@@ -127,16 +120,11 @@ fun ChatBubble(message: ChatMessage) {
     val backgroundColor = if (message.isFromParent) MaterialTheme.colorScheme.primary else Color.LightGray
     val textColor = if (message.isFromParent) Color.White else Color.Black
 
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = alignment
-    ) {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Text(
             text = message.text,
             color = textColor,
-            modifier = Modifier
-                .background(backgroundColor, RoundedCornerShape(16.dp))
-                .padding(12.dp)
+            modifier = Modifier.background(backgroundColor, RoundedCornerShape(16.dp)).padding(12.dp)
         )
     }
 }
