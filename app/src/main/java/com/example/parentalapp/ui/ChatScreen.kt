@@ -27,8 +27,8 @@ fun ChatScreen(onNavigateBack: () -> Unit) {
     // Stan dla listy wiadomości (testowe)
     var messages by remember {
         mutableStateOf(listOf(
-            ChatMessage("Cześć, wszystko w porządku?", true), // Od rodzica (po lewej, szare)
-            ChatMessage("Tak, wracam już do domu!", false)    // Od dziecka (po prawej, kolorowe)
+            ChatMessage("Cześć, wszystko w porządku?", true),
+            ChatMessage("Tak, wracam już do domu!", false)
         ))
     }
 
