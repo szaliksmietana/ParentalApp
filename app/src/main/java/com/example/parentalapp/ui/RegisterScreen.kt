@@ -13,12 +13,14 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
-    onRegisterClick: (String, String) -> Unit,
+    onRegisterClick: (String, String, String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -37,17 +39,29 @@ fun RegisterScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Rejestracja", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                text = "Rejestracja Rodzica",
+                style = MaterialTheme.typography.headlineMedium
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
 
             OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Nazwa użytkownika") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
-                label = { Text("E-mail") },
+                label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -55,7 +69,10 @@ fun RegisterScreen(
 
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = {
+                    password = it
+                    errorMessage = null
+                },
                 label = { Text("Hasło") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
@@ -65,23 +82,41 @@ fun RegisterScreen(
 
             OutlinedTextField(
                 value = confirmPassword,
-                onValueChange = { confirmPassword = it },
-                label = { Text("Powtórz hasło") },
+                onValueChange = {
+                    confirmPassword = it
+                    errorMessage = null
+                },
+                label = { Text("Potwierdź hasło") },
                 visualTransformation = PasswordVisualTransformation(),
+                isError = errorMessage != null,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            if (errorMessage != null) {
+                Text(
+                    text = errorMessage!!,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp).fillMaxWidth()
+                )
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
                 onClick = {
-                    // Tutaj w przyszłości będzie logika walidacji i wysyłki do FastAPI
-                    if (password == confirmPassword && password.isNotEmpty()) {
-                        onRegisterClick(email, password)
+                    if (password.isBlank() || email.isBlank() || username.isBlank()) {
+                        errorMessage = "Wypełnij wszystkie pola!"
+                    } else if (password.length < 8) {
+                        // NOWY WARUNEK: Blokujemy hasła krótsze niż 8 znaków w samej aplikacji
+                        errorMessage = "Hasło musi mieć minimum 8 znaków!"
+                    } else if (password != confirmPassword) {
+                        errorMessage = "Hasła nie są identyczne!"
+                    } else {
+                        onRegisterClick(email, password, username)
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                enabled = email.isNotBlank() && password.isNotBlank() && confirmPassword.isNotBlank()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Zarejestruj się")
             }
