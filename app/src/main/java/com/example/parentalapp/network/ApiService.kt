@@ -1,12 +1,28 @@
 package com.example.parentalapp.network
 
-import com.example.parentalapp.BuildConfig
+import android.content.Context
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
+import java.util.Properties
+
+object AppConfig {
+    private var baseUrl: String = "http://10.0.2.2:2244/" // fallback
+
+    fun init(context: Context) {
+        try {
+            val props = Properties()
+            context.assets.open("config.properties").use { props.load(it) }
+            baseUrl = props.getProperty("BASE_URL", baseUrl)
+        } catch (e: Exception) {
+        }
+    }
+
+    fun getBaseUrl() = baseUrl
+}
 
 object TokenManager {
     var token: String? = null
@@ -114,7 +130,7 @@ object RetrofitInstance {
 
     val api: FamilyGuardApi by lazy {
         Retrofit.Builder()
-            .baseUrl(BuildConfig.BASE_URL)
+            .baseUrl(AppConfig.getBaseUrl())
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
+import com.example.parentalapp.network.AppConfig
 import com.example.parentalapp.network.ConfirmPairingRequest
 import com.example.parentalapp.network.DeviceRegisterRequest
 import com.example.parentalapp.network.LoginRequest
@@ -48,6 +49,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Wczytaj URL z assets/config.properties
+        AppConfig.init(this)
+
         setContent {
             var currentScreen by remember { mutableStateOf(AppScreen.Login) }
             var childrenList by remember { mutableStateOf(listOf<ChildData>()) }
@@ -70,7 +74,6 @@ class MainActivity : ComponentActivity() {
                                     val response = RetrofitInstance.api.login(LoginRequest(email, password))
                                     TokenManager.token = response.access_token
 
-                                    // Rejestruj urządzenie lub pobierz istniejące
                                     try {
                                         val device = RetrofitInstance.api.registerDevice(DeviceRegisterRequest())
                                         parentDeviceId = device.id
@@ -208,7 +211,6 @@ class MainActivity : ComponentActivity() {
                                         )
                                     )
                                     Toast.makeText(context, "Sparowano pomyślnie!", Toast.LENGTH_SHORT).show()
-                                    // Wróć na Dashboard i odśwież listę dzieci
                                     currentScreen = AppScreen.Dashboard
                                 } catch (e: HttpException) {
                                     val body = e.response()?.errorBody()?.string()
