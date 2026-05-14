@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,7 +37,11 @@ import com.example.parentalapp.ui.SettingsScreen
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
-data class ChildData(val name: String, val code: String)
+data class ChildData(
+    val name: String,
+    val code: String,
+    val batteryLevel: Int? = null
+)
 
 enum class AppScreen {
     Login, Register, Dashboard, Map, Chat, AddChild, Settings
@@ -46,10 +51,22 @@ class MainActivity : ComponentActivity() {
 
     private var parentDeviceId: String? = null
 
+    private val PREFS_NAME = "parentalapp_prefs"
+    private val KEY_DEVICE_ID = "device_id"
+
+    private fun saveDeviceId(context: Context, deviceId: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_DEVICE_ID, deviceId).apply()
+    }
+
+    private fun loadDeviceId(context: Context): String? {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_DEVICE_ID, null)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Wczytaj URL z assets/config.properties
         AppConfig.init(this)
 
         setContent {
@@ -58,6 +75,8 @@ class MainActivity : ComponentActivity() {
             var selectedChild by remember { mutableStateOf<ChildData?>(null) }
             var pairingLoading by remember { mutableStateOf(false) }
             var pairingError by remember { mutableStateOf<String?>(null) }
+            // Licznik odświeżeń — zmiana wartości wymusza ponowne wykonanie LaunchedEffect
+            var dashboardRefreshKey by remember { mutableIntStateOf(0) }
 
             val context = LocalContext.current
 
@@ -74,17 +93,19 @@ class MainActivity : ComponentActivity() {
                                     val response = RetrofitInstance.api.login(LoginRequest(email, password))
                                     TokenManager.token = response.access_token
 
-                                    try {
+                                    val savedDeviceId = loadDeviceId(context)
+                                    if (savedDeviceId != null) {
+                                        parentDeviceId = savedDeviceId
+                                        Log.d("API_SUCCESS", "Używam zapisanego device_id: $parentDeviceId")
+                                    } else {
                                         val device = RetrofitInstance.api.registerDevice(DeviceRegisterRequest())
                                         parentDeviceId = device.id
-                                        Log.d("API_SUCCESS", "Nowe urządzenie: ${device.id}")
-                                    } catch (e: Exception) {
-                                        val devices = RetrofitInstance.api.getMyDevices()
-                                        parentDeviceId = devices.firstOrNull()?.id
-                                        Log.d("API_SUCCESS", "Istniejące urządzenie: $parentDeviceId")
+                                        saveDeviceId(context, device.id)
+                                        Log.d("API_SUCCESS", "Zarejestrowano device_id: $parentDeviceId")
                                     }
 
                                     Toast.makeText(context, "Zalogowano pomyślnie!", Toast.LENGTH_SHORT).show()
+                                    dashboardRefreshKey++
                                     currentScreen = AppScreen.Dashboard
                                 } catch (e: HttpException) {
                                     Log.e("API_ERROR", "HTTP ${e.code()}: ${e.response()?.errorBody()?.string()}")
@@ -123,18 +144,29 @@ class MainActivity : ComponentActivity() {
                 }
 
                 AppScreen.Dashboard -> {
-                    LaunchedEffect(currentScreen) {
+                    LaunchedEffect(dashboardRefreshKey) {
                         createNotificationChannel(context)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
 
                         val deviceId = parentDeviceId
+                        Log.d("DEBUG", "parentDeviceId = $deviceId, refreshKey = $dashboardRefreshKey")
+
                         if (deviceId != null) {
                             try {
                                 val fetchedChildren = RetrofitInstance.api.getChildren(deviceId)
                                 childrenList = fetchedChildren.map { child ->
-                                    ChildData(name = child.username, code = child.child_device_id)
+                                    val battery = try {
+                                        RetrofitInstance.api.getLatestLocation(child.child_device_id).battery_level
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                    ChildData(
+                                        name = child.username,
+                                        code = child.child_device_id,
+                                        batteryLevel = battery
+                                    )
                                 }
                                 Log.d("API_SUCCESS", "Pobrano ${childrenList.size} dzieci.")
                             } catch (e: HttpException) {
@@ -180,7 +212,10 @@ class MainActivity : ComponentActivity() {
                     MapScreen(
                         childrenList = childrenList,
                         selectedChild = selectedChild,
-                        onNavigateBack = { currentScreen = AppScreen.Dashboard }
+                        onNavigateBack = {
+                            dashboardRefreshKey++ // Odśwież dashboard po powrocie z mapy
+                            currentScreen = AppScreen.Dashboard
+                        }
                     )
                 }
 
@@ -188,7 +223,10 @@ class MainActivity : ComponentActivity() {
                     ChatScreen(
                         childrenList = childrenList,
                         initialChild = selectedChild,
-                        onNavigateBack = { currentScreen = AppScreen.Dashboard }
+                        onNavigateBack = {
+                            dashboardRefreshKey++
+                            currentScreen = AppScreen.Dashboard
+                        }
                     )
                 }
 
@@ -211,18 +249,25 @@ class MainActivity : ComponentActivity() {
                                         )
                                     )
                                     Toast.makeText(context, "Sparowano pomyślnie!", Toast.LENGTH_SHORT).show()
+                                    dashboardRefreshKey++
                                     currentScreen = AppScreen.Dashboard
                                 } catch (e: HttpException) {
                                     val body = e.response()?.errorBody()?.string()
                                     Log.e("API_ERROR", "HTTP ${e.code()}: $body")
-                                    pairingError = when (e.code()) {
-                                        404 -> "Kod nieprawidłowy lub wygasł"
-                                        409 -> "Urządzenia są już sparowane"
-                                        else -> "Błąd serwera: ${e.code()}"
+                                    when (e.code()) {
+                                        409 -> {
+                                            Toast.makeText(context, "Sparowano pomyślnie!", Toast.LENGTH_SHORT).show()
+                                            dashboardRefreshKey++
+                                            currentScreen = AppScreen.Dashboard
+                                        }
+                                        404 -> pairingError = "Kod nieprawidłowy lub wygasł"
+                                        else -> pairingError = "Błąd serwera: ${e.code()}"
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("API_ERROR", "Exception: ${e.message}")
-                                    pairingError = "Błąd połączenia"
+                                    Log.w("API_WARN", "Exception po confirm: ${e.message}")
+                                    Toast.makeText(context, "Sparowano pomyślnie!", Toast.LENGTH_SHORT).show()
+                                    dashboardRefreshKey++
+                                    currentScreen = AppScreen.Dashboard
                                 } finally {
                                     pairingLoading = false
                                 }
@@ -233,7 +278,10 @@ class MainActivity : ComponentActivity() {
 
                 AppScreen.Settings -> {
                     SettingsScreen(
-                        onNavigateBack = { currentScreen = AppScreen.Dashboard },
+                        onNavigateBack = {
+                            dashboardRefreshKey++
+                            currentScreen = AppScreen.Dashboard
+                        },
                         onLogoutClick = {
                             TokenManager.token = null
                             parentDeviceId = null

@@ -24,6 +24,7 @@ fun AddChildScreen(
     errorMessage: String? = null
 ) {
     var code by remember { mutableStateOf("") }
+    var submitted by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -63,7 +64,9 @@ fun AddChildScreen(
             BasicTextField(
                 value = code,
                 onValueChange = {
-                    if (it.length <= 6) code = it.filter { char -> char.isDigit() }
+                    if (!submitted && it.length <= 6) {
+                        code = it.filter { char -> char.isDigit() }
+                    }
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 decorationBox = {
@@ -108,8 +111,13 @@ fun AddChildScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = { onPairingConfirmed(code) },
-                enabled = code.length == 6 && !isLoading,
+                onClick = {
+                    if (!submitted && code.length == 6 && !isLoading) {
+                        submitted = true
+                        onPairingConfirmed(code)
+                    }
+                },
+                enabled = code.length == 6 && !isLoading && !submitted,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)

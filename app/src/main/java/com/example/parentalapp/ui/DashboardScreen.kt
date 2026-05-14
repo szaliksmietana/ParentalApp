@@ -22,7 +22,7 @@ import com.example.parentalapp.ChildData
 fun DashboardScreen(
     childrenList: List<ChildData>,
     onNavigateToMap: (ChildData) -> Unit,
-    onNavigateToAllMap: () -> Unit, // TUTAJ JEST BRAKUJĄCY PARAMETR
+    onNavigateToAllMap: () -> Unit,
     onNavigateToChat: (ChildData) -> Unit,
     onNavigateToAddChild: () -> Unit,
     onNavigateToSettings: () -> Unit,
@@ -33,7 +33,6 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text("Panel Rodzica") },
                 actions = {
-                    // Przycisk mapy dla wszystkich dzieci na górnym pasku
                     if (childrenList.isNotEmpty()) {
                         IconButton(onClick = onNavigateToAllMap) {
                             Icon(Icons.Filled.LocationOn, contentDescription = "Mapa wszystkich dzieci")
@@ -97,18 +96,47 @@ fun DashboardScreen(
                                     Text(text = child.name, style = MaterialTheme.typography.titleLarge)
                                     Text(text = "Status: Bezpieczny (w strefie)", style = MaterialTheme.typography.bodySmall)
                                 }
+
+                                // Poziom baterii po prawej stronie
+                                child.batteryLevel?.let { battery ->
+                                    val batteryColor = when {
+                                        battery >= 50 -> Color(0xFF4CAF50) // zielony
+                                        battery >= 20 -> Color(0xFFFF9800) // pomarańczowy
+                                        else -> Color(0xFFF44336)          // czerwony
+                                    }
+                                    Text(
+                                        text = "🔋 $battery%",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = batteryColor
+                                    )
+                                } ?: Text(
+                                    text = "🔋 --",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            Text(text = "Czas przed ekranem: 2h / 3h limitu", style = MaterialTheme.typography.bodySmall)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            LinearProgressIndicator(
-                                progress = { 0.66f },
-                                modifier = Modifier.fillMaxWidth().height(8.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
+                            // Pasek baterii
+                            child.batteryLevel?.let { battery ->
+                                val batteryColor = when {
+                                    battery >= 50 -> Color(0xFF4CAF50)
+                                    battery >= 20 -> Color(0xFFFF9800)
+                                    else -> Color(0xFFF44336)
+                                }
+                                Text(
+                                    text = "Bateria: $battery%",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { battery / 100f },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    color = batteryColor
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
 
                             Row(horizontalArrangement = Arrangement.SpaceBetween) {
                                 OutlinedButton(

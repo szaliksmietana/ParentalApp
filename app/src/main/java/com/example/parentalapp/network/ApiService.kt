@@ -10,7 +10,7 @@ import retrofit2.http.*
 import java.util.Properties
 
 object AppConfig {
-    private var baseUrl: String = "http://10.0.2.2:2244/" // fallback
+    private var baseUrl: String = "http://10.0.2.2:2244/"
 
     fun init(context: Context) {
         try {
@@ -18,6 +18,7 @@ object AppConfig {
             context.assets.open("config.properties").use { props.load(it) }
             baseUrl = props.getProperty("BASE_URL", baseUrl)
         } catch (e: Exception) {
+            // Fallback jeśli brak pliku
         }
     }
 
@@ -54,13 +55,16 @@ data class TokenResponse(
 
 data class DeviceRegisterRequest(
     val device_name: String? = "Telefon rodzica",
-    val platform: String = "android"
+    val platform: String = "android",
+    val fcm_token: String? = null
 )
 
 data class DeviceResponse(
     val id: String,
+    val user_id: String,
     val device_name: String?,
-    val platform: String
+    val platform: String,
+    val registered_at: String
 )
 
 data class PairedChildResponse(
@@ -86,6 +90,17 @@ data class PairingConfirmResponse(
     val is_active: Boolean
 )
 
+// Odpowiada schemas.LocationResponse z API
+data class LocationResponse(
+    val id: String,
+    val device_id: String,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy_meters: Double?,
+    val battery_level: Int?,
+    val recorded_at: String
+)
+
 interface FamilyGuardApi {
     @Headers("Connection: close")
     @POST("auth/register")
@@ -100,16 +115,16 @@ interface FamilyGuardApi {
     suspend fun registerDevice(@Body request: DeviceRegisterRequest): DeviceResponse
 
     @Headers("Connection: close")
-    @GET("devices")
-    suspend fun getMyDevices(): List<DeviceResponse>
-
-    @Headers("Connection: close")
     @GET("pairing/my-children")
     suspend fun getChildren(@Query("device_id") deviceId: String): List<PairedChildResponse>
 
     @Headers("Connection: close")
     @POST("pairing/confirm")
     suspend fun confirmPairing(@Body request: ConfirmPairingRequest): PairingConfirmResponse
+
+    @Headers("Connection: close")
+    @GET("location/{child_device_id}/latest")
+    suspend fun getLatestLocation(@Path("child_device_id") childDeviceId: String): LocationResponse
 }
 
 object RetrofitInstance {
