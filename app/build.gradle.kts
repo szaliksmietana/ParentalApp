@@ -53,10 +53,9 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Darmowe Mapy: OSMdroid
+
     implementation("org.osmdroid:osmdroid-android:6.1.20")
 
-    // Usługi lokalizacji (Przywrócone dla śledzenia GPS)
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // JWT Utility

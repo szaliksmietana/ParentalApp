@@ -3,30 +3,81 @@ package com.example.parentalapp
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.google.android.gms.location.*
+import com.example.parentalapp.network.LocationCreateRequest
+import com.example.parentalapp.network.RetrofitInstance
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class LocationTrackingService : Service() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val PREFS_NAME = "child_prefs"
+
+    private fun loadDeviceId(): String? {
+        return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("device_id", null)
+    }
+
+    private fun getBatteryLevel(): Int? {
+        return try {
+            val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (level < 0) null else level
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
-        // Inicjalizacja klienta Google Play Services do lokalizacji
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (location in locationResult.locations) {
-                    // TUTAJ DODAMY RETROFIT:
-                    // Wysyłanie paczki JSON (szerokość, długość) do serwera Python/PostgreSQL
-                    Log.d("LocationService", "Współrzędne dziecka: Lat: ${location.latitude}, Lng: ${location.longitude}")
+                    Log.d("LocationService", "GPS: Lat=${location.latitude}, Lng=${location.longitude}")
+
+                    val deviceId = loadDeviceId() ?: continue
+
+                    val battery = getBatteryLevel()
+                    val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else null
+
+                    serviceScope.launch {
+                        try {
+                            RetrofitInstance.api.postLocation(
+                                LocationCreateRequest(
+                                    device_id = deviceId,
+                                    latitude = location.latitude,
+                                    longitude = location.longitude,
+                                    accuracy_meters = accuracy,
+                                    battery_level = battery
+                                )
+                            )
+                            Log.d("LocationService", "Wysłano: ${location.latitude}, ${location.longitude}, bateria: $battery%")
+                        } catch (e: Exception) {
+                            Log.e("LocationService", "Błąd wysyłania: ${e.message}")
+                        }
+                    }
                 }
             }
         }
@@ -35,7 +86,6 @@ class LocationTrackingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
 
-        // Android wymaga, aby usługa w tle wyświetlała stałe powiadomienie
         val notification = NotificationCompat.Builder(this, "LOCATION_CHANNEL_ID")
             .setContentTitle("Parental App")
             .setContentText("Śledzenie lokalizacji w tle jest aktywne")
@@ -46,12 +96,10 @@ class LocationTrackingService : Service() {
         startForeground(1, notification)
         startLocationUpdates()
 
-        // START_STICKY gwarantuje, że jeśli system ubije apkę z braku RAMu, spróbuje ją zrestartować
         return START_STICKY
     }
 
     private fun startLocationUpdates() {
-        // Ustawienia GPS: wysoka dokładność, odpytywanie co 15 sekund
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15000)
             .setMinUpdateIntervalMillis(10000)
             .build()
@@ -63,7 +111,7 @@ class LocationTrackingService : Service() {
                 Looper.getMainLooper()
             )
         } catch (e: SecurityException) {
-            Log.e("LocationService", "Brak uprawnień do lokalizacji: ${e.message}")
+            Log.e("LocationService", "Brak uprawnień: ${e.message}")
         }
     }
 
@@ -74,8 +122,7 @@ class LocationTrackingService : Service() {
                 "Lokalizacja",
                 NotificationManager.IMPORTANCE_LOW
             )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
     }
 
@@ -84,7 +131,5 @@ class LocationTrackingService : Service() {
         fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null // Klasyczna usługa w tle, nie wymaga bindowania
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 }

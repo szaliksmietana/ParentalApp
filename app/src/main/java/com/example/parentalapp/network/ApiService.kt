@@ -1,0 +1,157 @@
+package com.example.parentalapp.network
+
+import android.content.Context
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.*
+import java.util.Properties
+
+object AppConfig {
+    private var baseUrl: String = "http://10.0.2.2:2244/"
+
+    fun init(context: Context) {
+        try {
+            val props = Properties()
+            context.assets.open("config.properties").use { props.load(it) }
+            baseUrl = props.getProperty("BASE_URL", baseUrl)
+        } catch (e: Exception) {
+            // Fallback
+        }
+    }
+
+    fun getBaseUrl() = baseUrl
+}
+
+object TokenManager {
+    var token: String? = null
+}
+
+data class RegisterRequest(
+    val email: String,
+    val password: String,
+    val username: String,
+    val role: String = "child"
+)
+
+data class LoginRequest(
+    val email: String,
+    val password: String
+)
+
+data class UserResponse(
+    val id: String,
+    val email: String,
+    val username: String,
+    val role: String
+)
+
+data class TokenResponse(
+    val access_token: String,
+    val token_type: String
+)
+
+data class DeviceRegisterRequest(
+    val device_name: String? = "Telefon dziecka",
+    val platform: String = "android",
+    val fcm_token: String? = null
+)
+
+data class DeviceResponse(
+    val id: String,
+    val user_id: String,
+    val device_name: String?,
+    val platform: String,
+    val registered_at: String
+)
+
+// Żądanie generowania kodu parowania
+data class GeneratePairingCodeRequest(
+    val device_id: String
+)
+
+// Odpowiedź z kodem parowania
+data class PairingCodeResponse(
+    val code: String,
+    val expires_at: String
+)
+
+// Status parowania
+data class PairingStatusResponse(
+    val is_paired: Boolean,
+    val pair_id: String?,
+    val paired_at: String?
+)
+
+// Lokalizacja wysyłana przez dziecko
+data class LocationCreateRequest(
+    val device_id: String,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy_meters: Double? = null,
+    val battery_level: Int? = null
+)
+
+data class LocationResponse(
+    val id: String,
+    val device_id: String,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy_meters: Double?,
+    val battery_level: Int?,
+    val recorded_at: String
+)
+
+interface FamilyGuardApi {
+    @Headers("Connection: close")
+    @POST("auth/register")
+    suspend fun register(@Body request: RegisterRequest): UserResponse
+
+    @Headers("Connection: close")
+    @POST("auth/login")
+    suspend fun login(@Body request: LoginRequest): TokenResponse
+
+    @Headers("Connection: close")
+    @POST("devices/register")
+    suspend fun registerDevice(@Body request: DeviceRegisterRequest): DeviceResponse
+
+    @Headers("Connection: close")
+    @POST("pairing/generate")
+    suspend fun generatePairingCode(@Body request: GeneratePairingCodeRequest): PairingCodeResponse
+
+    @Headers("Connection: close")
+    @GET("pairing/status")
+    suspend fun getPairingStatus(@Query("device_id") deviceId: String): PairingStatusResponse
+
+    @Headers("Connection: close")
+    @POST("location")
+    suspend fun postLocation(@Body request: LocationCreateRequest): LocationResponse
+}
+
+object RetrofitInstance {
+    private val logging = HttpLoggingInterceptor().apply {
+        level = HttpLoggingInterceptor.Level.BODY
+    }
+
+    private val client = OkHttpClient.Builder()
+        .protocols(listOf(Protocol.HTTP_1_1))
+        .addInterceptor(logging)
+        .addInterceptor { chain ->
+            val requestBuilder = chain.request().newBuilder()
+            TokenManager.token?.let {
+                requestBuilder.addHeader("Authorization", "Bearer $it")
+            }
+            chain.proceed(requestBuilder.build())
+        }.build()
+
+    val api: FamilyGuardApi by lazy {
+        Retrofit.Builder()
+            .baseUrl(AppConfig.getBaseUrl())
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(FamilyGuardApi::class.java)
+    }
+}
