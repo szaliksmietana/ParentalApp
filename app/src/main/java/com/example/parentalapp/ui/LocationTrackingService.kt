@@ -33,9 +33,11 @@ class LocationTrackingService : Service() {
 
     private val PREFS_NAME = "child_prefs"
 
+    // Szuka pierwszego klucza zaczynającego się od "device_id_" — działa niezależnie od emaila
     private fun loadDeviceId(): String? {
-        return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString("device_id", null)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val deviceIdEntry = prefs.all.entries.firstOrNull { it.key.startsWith("device_id_") }
+        return deviceIdEntry?.value as? String
     }
 
     private fun getBatteryLevel(): Int? {
@@ -57,7 +59,11 @@ class LocationTrackingService : Service() {
                 for (location in locationResult.locations) {
                     Log.d("LocationService", "GPS: Lat=${location.latitude}, Lng=${location.longitude}")
 
-                    val deviceId = loadDeviceId() ?: continue
+                    val deviceId = loadDeviceId()
+                    if (deviceId == null) {
+                        Log.w("LocationService", "Brak device_id — pomijam wysyłanie")
+                        continue
+                    }
 
                     val battery = getBatteryLevel()
                     val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else null
