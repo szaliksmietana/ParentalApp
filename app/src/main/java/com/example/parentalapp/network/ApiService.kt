@@ -8,6 +8,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 
 object AppConfig {
     private var baseUrl: String = "http://10.0.2.2:2244/"
@@ -27,8 +28,19 @@ object AppConfig {
 
 object TokenManager {
     var token: String? = null
+    var tokenExpiry: Long = 0L
+
+    fun isTokenExpired(): Boolean {
+        return System.currentTimeMillis() > tokenExpiry - 5 * 60 * 1000
+    }
+
+    fun saveToken(accessToken: String) {
+        token = accessToken
+        tokenExpiry = System.currentTimeMillis() + 24 * 60 * 60 * 1000
+    }
 }
 
+// --- Auth ---
 data class RegisterRequest(
     val email: String,
     val password: String,
@@ -53,10 +65,12 @@ data class TokenResponse(
     val token_type: String
 )
 
+// --- Devices ---
 data class DeviceRegisterRequest(
     val device_name: String? = "Telefon rodzica",
     val platform: String = "android",
-    val fcm_token: String? = null
+    val fcm_token: String? = null,
+    val hardware_id: String? = null
 )
 
 data class DeviceResponse(
@@ -64,9 +78,11 @@ data class DeviceResponse(
     val user_id: String,
     val device_name: String?,
     val platform: String,
+    val hardware_id: String?,
     val registered_at: String
 )
 
+// --- Pairing ---
 data class PairedChildResponse(
     val pair_id: String,
     val child_device_id: String,
@@ -90,7 +106,7 @@ data class PairingConfirmResponse(
     val is_active: Boolean
 )
 
-// Odpowiada schemas.LocationResponse z API
+// --- Location ---
 data class LocationResponse(
     val id: String,
     val device_id: String,
@@ -101,6 +117,33 @@ data class LocationResponse(
     val recorded_at: String
 )
 
+// --- Dashboard ---
+data class LatestLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy_meters: Double?,
+    val battery_level: Int?,
+    val recorded_at: String
+)
+
+data class MessageResponse(
+    val id: String,
+    val sender_device_id: String,
+    val receiver_device_id: String,
+    val content: String,
+    val sent_at: String,
+    val read_at: String?
+)
+
+data class ChildDashboardResponse(
+    val child_device_id: String,
+    val username: String,
+    val device_name: String?,
+    val last_seen: String?,
+    val latest_location: LatestLocation?,
+    val recent_messages: List<MessageResponse>
+)
+
 interface FamilyGuardApi {
     @Headers("Connection: close")
     @POST("auth/register")
@@ -109,6 +152,10 @@ interface FamilyGuardApi {
     @Headers("Connection: close")
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): TokenResponse
+
+    @Headers("Connection: close")
+    @POST("auth/refresh")
+    suspend fun refreshToken(): TokenResponse
 
     @Headers("Connection: close")
     @POST("devices/register")
@@ -125,6 +172,10 @@ interface FamilyGuardApi {
     @Headers("Connection: close")
     @GET("location/{child_device_id}/latest")
     suspend fun getLatestLocation(@Path("child_device_id") childDeviceId: String): LocationResponse
+
+    @Headers("Connection: close")
+    @GET("dashboard/child/{child_device_id}")
+    suspend fun getChildDashboard(@Path("child_device_id") childDeviceId: String): ChildDashboardResponse
 }
 
 object RetrofitInstance {
@@ -134,6 +185,9 @@ object RetrofitInstance {
 
     private val client = OkHttpClient.Builder()
         .protocols(listOf(Protocol.HTTP_1_1))
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(logging)
         .addInterceptor { chain ->
             val requestBuilder = chain.request().newBuilder()

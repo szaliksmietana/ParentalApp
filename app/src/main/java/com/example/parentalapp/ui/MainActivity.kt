@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -50,18 +51,34 @@ enum class AppScreen {
 class MainActivity : ComponentActivity() {
 
     private var parentDeviceId: String? = null
-
     private val PREFS_NAME = "parentalapp_prefs"
-    private val KEY_DEVICE_ID = "device_id"
 
-    private fun saveDeviceId(context: Context, deviceId: String) {
+    // Zapisuje device_id per email — różni użytkownicy mają różne device_id
+    private fun saveDeviceId(context: Context, email: String, deviceId: String) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_DEVICE_ID, deviceId).apply()
+            .edit().putString("device_id_$email", deviceId).apply()
     }
 
-    private fun loadDeviceId(context: Context): String? {
+    private fun loadDeviceId(context: Context, email: String): String? {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_DEVICE_ID, null)
+            .getString("device_id_$email", null)
+    }
+
+    // Unikalny identyfikator urządzenia (nie zmienia się przy reinstalacji od Android 8+)
+    private fun getHardwareId(context: Context): String {
+        return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+    }
+
+    private suspend fun refreshTokenIfNeeded() {
+        if (TokenManager.isTokenExpired()) {
+            try {
+                val response = RetrofitInstance.api.refreshToken()
+                TokenManager.saveToken(response.access_token)
+                Log.d("API_SUCCESS", "Token odświeżony")
+            } catch (e: Exception) {
+                Log.e("API_ERROR", "Nie udało się odświeżyć tokenu: ${e.message}")
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,7 +92,6 @@ class MainActivity : ComponentActivity() {
             var selectedChild by remember { mutableStateOf<ChildData?>(null) }
             var pairingLoading by remember { mutableStateOf(false) }
             var pairingError by remember { mutableStateOf<String?>(null) }
-            // Licznik odświeżeń — zmiana wartości wymusza ponowne wykonanie LaunchedEffect
             var dashboardRefreshKey by remember { mutableIntStateOf(0) }
 
             val context = LocalContext.current
@@ -91,17 +107,25 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch {
                                 try {
                                     val response = RetrofitInstance.api.login(LoginRequest(email, password))
-                                    TokenManager.token = response.access_token
+                                    TokenManager.saveToken(response.access_token)
 
-                                    val savedDeviceId = loadDeviceId(context)
+                                    // Sprawdź czy mamy device_id dla tego konkretnego emaila
+                                    val savedDeviceId = loadDeviceId(context, email)
                                     if (savedDeviceId != null) {
                                         parentDeviceId = savedDeviceId
-                                        Log.d("API_SUCCESS", "Używam zapisanego device_id: $parentDeviceId")
+                                        Log.d("API_SUCCESS", "Używam zapisanego device_id dla $email: $parentDeviceId")
                                     } else {
-                                        val device = RetrofitInstance.api.registerDevice(DeviceRegisterRequest())
+                                        // Zarejestruj urządzenie z hardware_id
+                                        val hardwareId = getHardwareId(context)
+                                        val device = RetrofitInstance.api.registerDevice(
+                                            DeviceRegisterRequest(
+                                                device_name = "Telefon rodzica",
+                                                hardware_id = hardwareId
+                                            )
+                                        )
                                         parentDeviceId = device.id
-                                        saveDeviceId(context, device.id)
-                                        Log.d("API_SUCCESS", "Zarejestrowano device_id: $parentDeviceId")
+                                        saveDeviceId(context, email, device.id)
+                                        Log.d("API_SUCCESS", "Zarejestrowano device_id dla $email: $parentDeviceId")
                                     }
 
                                     Toast.makeText(context, "Zalogowano pomyślnie!", Toast.LENGTH_SHORT).show()
@@ -150,15 +174,19 @@ class MainActivity : ComponentActivity() {
                             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
 
+                        refreshTokenIfNeeded()
+
                         val deviceId = parentDeviceId
                         Log.d("DEBUG", "parentDeviceId = $deviceId, refreshKey = $dashboardRefreshKey")
 
                         if (deviceId != null) {
                             try {
                                 val fetchedChildren = RetrofitInstance.api.getChildren(deviceId)
+
                                 childrenList = fetchedChildren.map { child ->
                                     val battery = try {
-                                        RetrofitInstance.api.getLatestLocation(child.child_device_id).battery_level
+                                        val dashboard = RetrofitInstance.api.getChildDashboard(child.child_device_id)
+                                        dashboard.latest_location?.battery_level
                                     } catch (e: Exception) {
                                         null
                                     }
@@ -172,8 +200,14 @@ class MainActivity : ComponentActivity() {
                             } catch (e: HttpException) {
                                 Log.e("API_ERROR", "HTTP ${e.code()}: ${e.response()?.errorBody()?.string()}")
                                 if (e.code() == 401) {
-                                    TokenManager.token = null
-                                    currentScreen = AppScreen.Login
+                                    try {
+                                        val refreshed = RetrofitInstance.api.refreshToken()
+                                        TokenManager.saveToken(refreshed.access_token)
+                                        dashboardRefreshKey++
+                                    } catch (re: Exception) {
+                                        TokenManager.token = null
+                                        currentScreen = AppScreen.Login
+                                    }
                                 }
                             } catch (e: Exception) {
                                 Log.e("API_ERROR", "Błąd pobierania dzieci: ${e.message}")
@@ -213,7 +247,7 @@ class MainActivity : ComponentActivity() {
                         childrenList = childrenList,
                         selectedChild = selectedChild,
                         onNavigateBack = {
-                            dashboardRefreshKey++ // Odśwież dashboard po powrocie z mapy
+                            dashboardRefreshKey++
                             currentScreen = AppScreen.Dashboard
                         }
                     )
