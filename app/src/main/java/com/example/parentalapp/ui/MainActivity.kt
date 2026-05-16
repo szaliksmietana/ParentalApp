@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -40,16 +41,31 @@ enum class AppScreen {
 class MainActivity : ComponentActivity() {
 
     private val PREFS_NAME = "child_prefs"
-    private val KEY_DEVICE_ID = "device_id"
 
-    private fun saveDeviceId(context: Context, deviceId: String) {
+    private fun saveDeviceId(context: Context, email: String, deviceId: String) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_DEVICE_ID, deviceId).apply()
+            .edit().putString("device_id_$email", deviceId).apply()
     }
 
-    private fun loadDeviceId(context: Context): String? {
+    private fun loadDeviceId(context: Context, email: String): String? {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_DEVICE_ID, null)
+            .getString("device_id_$email", null)
+    }
+
+    private fun getHardwareId(context: Context): String {
+        return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+    }
+
+    private suspend fun refreshTokenIfNeeded() {
+        if (TokenManager.isTokenExpired()) {
+            try {
+                val response = RetrofitInstance.api.refreshToken()
+                TokenManager.saveToken(response.access_token)
+                Log.d("API_SUCCESS", "Token odświeżony")
+            } catch (e: Exception) {
+                Log.e("API_ERROR", "Nie udało się odświeżyć tokenu: ${e.message}")
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,19 +99,24 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch {
                                 try {
                                     val response = RetrofitInstance.api.login(LoginRequest(email, password))
-                                    TokenManager.token = response.access_token
+                                    TokenManager.saveToken(response.access_token)
 
-                                    val savedDeviceId = loadDeviceId(context)
-                                    if (savedDeviceId == null) {
-                                        val device = RetrofitInstance.api.registerDevice(
-                                            DeviceRegisterRequest(device_name = "Telefon dziecka")
-                                        )
-                                        saveDeviceId(context, device.id)
-                                        childDeviceId = device.id
-                                        Log.d("API_SUCCESS", "Zarejestrowano device dziecka: ${device.id}")
-                                    } else {
+                                    // device_id per email — różni użytkownicy mają osobne wpisy
+                                    val savedDeviceId = loadDeviceId(context, email)
+                                    if (savedDeviceId != null) {
                                         childDeviceId = savedDeviceId
-                                        Log.d("API_SUCCESS", "Używam zapisanego device dziecka: $savedDeviceId")
+                                        Log.d("API_SUCCESS", "Używam zapisanego device_id dla $email: $savedDeviceId")
+                                    } else {
+                                        val hardwareId = getHardwareId(context)
+                                        val device = RetrofitInstance.api.registerDevice(
+                                            DeviceRegisterRequest(
+                                                device_name = "Telefon dziecka",
+                                                hardware_id = hardwareId
+                                            )
+                                        )
+                                        childDeviceId = device.id
+                                        saveDeviceId(context, email, device.id)
+                                        Log.d("API_SUCCESS", "Zarejestrowano device_id dla $email: ${device.id}")
                                     }
 
                                     Toast.makeText(context, "Zalogowano pomyślnie!", Toast.LENGTH_SHORT).show()
@@ -149,6 +170,8 @@ class MainActivity : ComponentActivity() {
 
                 AppScreen.Dashboard -> {
                     LaunchedEffect(Unit) {
+                        refreshTokenIfNeeded()
+
                         val permissionsToRequest = mutableListOf(
                             Manifest.permission.ACCESS_FINE_LOCATION,
                             Manifest.permission.ACCESS_COARSE_LOCATION

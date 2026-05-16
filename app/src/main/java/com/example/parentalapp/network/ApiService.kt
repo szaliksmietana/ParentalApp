@@ -8,6 +8,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 
 object AppConfig {
     private var baseUrl: String = "http://10.0.2.2:2244/"
@@ -27,8 +28,19 @@ object AppConfig {
 
 object TokenManager {
     var token: String? = null
+    var tokenExpiry: Long = 0L
+
+    fun isTokenExpired(): Boolean {
+        return System.currentTimeMillis() > tokenExpiry - 5 * 60 * 1000
+    }
+
+    fun saveToken(accessToken: String) {
+        token = accessToken
+        tokenExpiry = System.currentTimeMillis() + 24 * 60 * 60 * 1000
+    }
 }
 
+// --- Auth ---
 data class RegisterRequest(
     val email: String,
     val password: String,
@@ -53,10 +65,12 @@ data class TokenResponse(
     val token_type: String
 )
 
+// --- Devices ---
 data class DeviceRegisterRequest(
     val device_name: String? = "Telefon dziecka",
     val platform: String = "android",
-    val fcm_token: String? = null
+    val fcm_token: String? = null,
+    val hardware_id: String? = null
 )
 
 data class DeviceResponse(
@@ -64,28 +78,27 @@ data class DeviceResponse(
     val user_id: String,
     val device_name: String?,
     val platform: String,
+    val hardware_id: String?,
     val registered_at: String
 )
 
-// Żądanie generowania kodu parowania
+// --- Pairing ---
 data class GeneratePairingCodeRequest(
     val device_id: String
 )
 
-// Odpowiedź z kodem parowania
 data class PairingCodeResponse(
     val code: String,
     val expires_at: String
 )
 
-// Status parowania
 data class PairingStatusResponse(
     val is_paired: Boolean,
     val pair_id: String?,
     val paired_at: String?
 )
 
-// Lokalizacja wysyłana przez dziecko
+// --- Location ---
 data class LocationCreateRequest(
     val device_id: String,
     val latitude: Double,
@@ -114,6 +127,10 @@ interface FamilyGuardApi {
     suspend fun login(@Body request: LoginRequest): TokenResponse
 
     @Headers("Connection: close")
+    @POST("auth/refresh")
+    suspend fun refreshToken(): TokenResponse
+
+    @Headers("Connection: close")
     @POST("devices/register")
     suspend fun registerDevice(@Body request: DeviceRegisterRequest): DeviceResponse
 
@@ -137,6 +154,9 @@ object RetrofitInstance {
 
     private val client = OkHttpClient.Builder()
         .protocols(listOf(Protocol.HTTP_1_1))
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(logging)
         .addInterceptor { chain ->
             val requestBuilder = chain.request().newBuilder()
