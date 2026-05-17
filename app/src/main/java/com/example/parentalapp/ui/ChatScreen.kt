@@ -1,5 +1,7 @@
 package com.example.parentalapp.ui
 
+import android.app.NotificationManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,7 +16,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationCompat
 import com.example.parentalapp.network.MessageResponse
 import com.example.parentalapp.network.RetrofitInstance
 import com.example.parentalapp.network.SendMessageRequest
@@ -22,12 +26,25 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+private fun showMessageNotification(context: Context, content: String) {
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    val notification = NotificationCompat.Builder(context, "geofence_alerts")
+        .setSmallIcon(android.R.drawable.ic_dialog_email)
+        .setContentTitle("Nowa wiadomość od rodzica")
+        .setContentText(content)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .build()
+    manager.notify(System.currentTimeMillis().toInt(), notification)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     childDeviceId: String,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var currentMessage by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<MessageResponse>>(emptyList()) }
     var guardianDeviceId by remember { mutableStateOf<String?>(null) }
@@ -36,22 +53,36 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Polling co 10s — pobiera historię i oznacza nieprzeczytane
+    val seenMessageIds = remember { mutableSetOf<String>() }
+
     LaunchedEffect(childDeviceId) {
         while (isActive) {
             try {
-                // Pobierz guardian_device_id jeśli jeszcze nie mamy
                 if (guardianDeviceId == null) {
                     val guardian = RetrofitInstance.api.getMyGuardian(childDeviceId)
                     guardianDeviceId = guardian.guardian_device_id
                 }
 
-                // Pobierz historię wiadomości
                 val history = RetrofitInstance.api.getMessageHistory(childDeviceId)
-                messages = history.sortedBy { it.sent_at }
+                val sorted = history.sortedBy { it.sent_at }
+
+                // Nowe wiadomości od rodzica których jeszcze nie widzieliśmy
+                val freshFromGuardian = sorted.filter { msg ->
+                    msg.sender_device_id != childDeviceId &&
+                            msg.id !in seenMessageIds
+                }
+
+                // Powiadomienie tylko jeśli nie jest to pierwsze ładowanie
+                if (seenMessageIds.isNotEmpty()) {
+                    freshFromGuardian.forEach { msg ->
+                        showMessageNotification(context, msg.content)
+                    }
+                }
+
+                sorted.forEach { seenMessageIds.add(it.id) }
 
                 // Oznacz nieprzeczytane wiadomości od rodzica jako przeczytane
-                messages.filter {
+                sorted.filter {
                     it.receiver_device_id == childDeviceId && it.read_at == null
                 }.forEach { msg ->
                     try {
@@ -60,6 +91,8 @@ fun ChatScreen(
                         // Ignoruj błędy oznaczania
                     }
                 }
+
+                messages = sorted
 
             } catch (e: Exception) {
                 // Brak parowania lub błąd sieci
@@ -70,7 +103,6 @@ fun ChatScreen(
         }
     }
 
-    // Przewiń na dół gdy pojawią się nowe wiadomości
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -124,6 +156,7 @@ fun ChatScreen(
                                     )
                                 )
                                 messages = (messages + sent).sortedBy { it.sent_at }
+                                seenMessageIds.add(sent.id)
                             } catch (e: Exception) {
                                 currentMessage = optimisticContent
                             } finally {
