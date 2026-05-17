@@ -1,7 +1,5 @@
 package com.example.parentalapp.ui
 
-import android.app.NotificationManager
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,25 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationCompat
 import com.example.parentalapp.network.MessageResponse
 import com.example.parentalapp.network.RetrofitInstance
 import com.example.parentalapp.network.SendMessageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-
-private fun showMessageNotification(context: Context, content: String) {
-    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    val notification = NotificationCompat.Builder(context, "geofence_alerts")
-        .setSmallIcon(android.R.drawable.ic_dialog_email)
-        .setContentTitle("Nowa wiadomość od rodzica")
-        .setContentText(content)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setAutoCancel(true)
-        .build()
-    manager.notify(System.currentTimeMillis().toInt(), notification)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,36 +51,29 @@ fun ChatScreen(
                 val history = RetrofitInstance.api.getMessageHistory(childDeviceId)
                 val sorted = history.sortedBy { it.sent_at }
 
-                // Nowe wiadomości od rodzica których jeszcze nie widzieliśmy
                 val freshFromGuardian = sorted.filter { msg ->
-                    msg.sender_device_id != childDeviceId &&
-                            msg.id !in seenMessageIds
+                    msg.sender_device_id != childDeviceId && msg.id !in seenMessageIds
                 }
 
-                // Powiadomienie tylko jeśli nie jest to pierwsze ładowanie
                 if (seenMessageIds.isNotEmpty()) {
                     freshFromGuardian.forEach { msg ->
-                        showMessageNotification(context, msg.content)
+                        NotificationHelper.showMessageNotification(context, msg.content)
                     }
                 }
 
                 sorted.forEach { seenMessageIds.add(it.id) }
 
-                // Oznacz nieprzeczytane wiadomości od rodzica jako przeczytane
                 sorted.filter {
                     it.receiver_device_id == childDeviceId && it.read_at == null
                 }.forEach { msg ->
                     try {
                         RetrofitInstance.api.markAsRead(msg.id, childDeviceId)
-                    } catch (e: Exception) {
-                        // Ignoruj błędy oznaczania
-                    }
+                    } catch (_: Exception) {}
                 }
 
                 messages = sorted
 
-            } catch (e: Exception) {
-                // Brak parowania lub błąd sieci
+            } catch (_: Exception) {
             } finally {
                 isLoading = false
             }
@@ -157,7 +135,7 @@ fun ChatScreen(
                                 )
                                 messages = (messages + sent).sortedBy { it.sent_at }
                                 seenMessageIds.add(sent.id)
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 currentMessage = optimisticContent
                             } finally {
                                 isSending = false

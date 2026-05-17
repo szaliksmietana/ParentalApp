@@ -31,6 +31,7 @@ import com.example.parentalapp.ui.DashboardScreen
 import com.example.parentalapp.ui.LoginScreen
 import com.example.parentalapp.ui.RegisterScreen
 import com.example.parentalapp.ui.SettingsScreen
+import com.example.parentalapp.ui.NotificationHelper
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
@@ -72,7 +73,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         AppConfig.init(this)
-
+        NotificationHelper.createChannels(this)
         setContent {
             var currentScreen by remember { mutableStateOf(AppScreen.Login) }
             var childDeviceId by remember { mutableStateOf<String?>(null) }
