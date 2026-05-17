@@ -36,7 +36,7 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Pobierz guardian_device_id i wiadomości, polling co 10s
+    // Polling co 10s — pobiera historię i oznacza nieprzeczytane
     LaunchedEffect(childDeviceId) {
         while (isActive) {
             try {
@@ -46,7 +46,11 @@ fun ChatScreen(
                     guardianDeviceId = guardian.guardian_device_id
                 }
 
-                // Oznacz wiadomości od rodzica jako przeczytane
+                // Pobierz historię wiadomości
+                val history = RetrofitInstance.api.getMessageHistory(childDeviceId)
+                messages = history.sortedBy { it.sent_at }
+
+                // Oznacz nieprzeczytane wiadomości od rodzica jako przeczytane
                 messages.filter {
                     it.receiver_device_id == childDeviceId && it.read_at == null
                 }.forEach { msg ->
@@ -58,7 +62,7 @@ fun ChatScreen(
                 }
 
             } catch (e: Exception) {
-                // Brak parowania lub błąd sieci — spróbuj ponownie za 10s
+                // Brak parowania lub błąd sieci
             } finally {
                 isLoading = false
             }
@@ -121,7 +125,6 @@ fun ChatScreen(
                                 )
                                 messages = (messages + sent).sortedBy { it.sent_at }
                             } catch (e: Exception) {
-                                // Przywróć wiadomość jeśli wysyłanie się nie powiodło
                                 currentMessage = optimisticContent
                             } finally {
                                 isSending = false
@@ -201,7 +204,6 @@ fun ChildChatBubble(
     isRead: Boolean,
     time: String
 ) {
-    // Dziecko po prawej, rodzic po lewej
     val alignment = if (isFromChild) Alignment.CenterEnd else Alignment.CenterStart
     val backgroundColor = if (isFromChild) MaterialTheme.colorScheme.primary else Color.LightGray
     val textColor = if (isFromChild) Color.White else Color.Black

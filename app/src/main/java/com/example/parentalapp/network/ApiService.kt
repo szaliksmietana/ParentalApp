@@ -185,6 +185,13 @@ interface FamilyGuardApi {
         @Path("message_id") messageId: String,
         @Query("device_id") deviceId: String
     ): MessageResponse
+
+    @Headers("Connection: close")
+    @GET("messages/history")
+    suspend fun getMessageHistory(
+        @Query("device_id") deviceId: String,
+        @Query("limit") limit: Int = 40
+    ): List<MessageResponse>
 }
 
 object RetrofitInstance {
