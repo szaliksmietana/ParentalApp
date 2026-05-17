@@ -1,6 +1,7 @@
 package com.example.parentalapp.network
 
 import android.content.Context
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
@@ -152,43 +153,33 @@ data class SendMessageRequest(
 )
 
 interface FamilyGuardApi {
-    @Headers("Connection: close")
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): UserResponse
 
-    @Headers("Connection: close")
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): TokenResponse
 
-    @Headers("Connection: close")
     @POST("auth/refresh")
     suspend fun refreshToken(): TokenResponse
 
-    @Headers("Connection: close")
     @POST("devices/register")
     suspend fun registerDevice(@Body request: DeviceRegisterRequest): DeviceResponse
 
-    @Headers("Connection: close")
     @GET("pairing/my-children")
     suspend fun getChildren(@Query("device_id") deviceId: String): List<PairedChildResponse>
 
-    @Headers("Connection: close")
     @POST("pairing/confirm")
     suspend fun confirmPairing(@Body request: ConfirmPairingRequest): PairingConfirmResponse
 
-    @Headers("Connection: close")
     @GET("location/{child_device_id}/latest")
     suspend fun getLatestLocation(@Path("child_device_id") childDeviceId: String): LocationResponse
 
-    @Headers("Connection: close")
     @GET("dashboard/child/{child_device_id}")
     suspend fun getChildDashboard(@Path("child_device_id") childDeviceId: String): ChildDashboardResponse
 
-    @Headers("Connection: close")
     @POST("messages")
     suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse
 
-    @Headers("Connection: close")
     @POST("messages/{message_id}/read")
     suspend fun markAsRead(
         @Path("message_id") messageId: String,
@@ -203,17 +194,33 @@ object RetrofitInstance {
 
     private val client = OkHttpClient.Builder()
         .protocols(listOf(Protocol.HTTP_1_1))
+        .retryOnConnectionFailure(true)
+        .connectionPool(
+            ConnectionPool(
+                maxIdleConnections = 5,
+                keepAliveDuration = 5,
+                timeUnit = TimeUnit.MINUTES
+            )
+        )
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(logging)
+        .addInterceptor { chain ->
+            // Usuń Connection: close — pozwól OkHttp zarządzać połączeniami
+            val request = chain.request().newBuilder()
+                .removeHeader("Connection")
+                .build()
+            chain.proceed(request)
+        }
         .addInterceptor { chain ->
             val requestBuilder = chain.request().newBuilder()
             TokenManager.token?.let {
                 requestBuilder.addHeader("Authorization", "Bearer $it")
             }
             chain.proceed(requestBuilder.build())
-        }.build()
+        }
+        .addInterceptor(logging)
+        .build()
 
     val api: FamilyGuardApi by lazy {
         Retrofit.Builder()
