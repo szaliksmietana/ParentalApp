@@ -1,5 +1,7 @@
 package com.example.parentalapp.ui
 
+import android.app.NotificationManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,7 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationCompat
 import com.example.parentalapp.ChildData
 import com.example.parentalapp.network.MessageResponse
 import com.example.parentalapp.network.RetrofitInstance
@@ -24,6 +28,18 @@ import com.example.parentalapp.network.SendMessageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+private fun showMessageNotification(context: Context, senderName: String, content: String) {
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    val notification = NotificationCompat.Builder(context, "geofence_alerts")
+        .setSmallIcon(android.R.drawable.ic_dialog_email)
+        .setContentTitle("Nowa wiadomość od $senderName")
+        .setContentText(content)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .build()
+    manager.notify(System.currentTimeMillis().toInt(), notification)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +49,7 @@ fun ChatScreen(
     guardianDeviceId: String,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var currentMessage by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<MessageResponse>>(emptyList()) }
     var expanded by remember { mutableStateOf(false) }
@@ -41,14 +58,32 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Pobierz wiadomości i odświeżaj co 10 sekund
+    // Zbiór ID wiadomości które już widzieliśmy — żeby nie powiadamiać o starych
+    val seenMessageIds = remember { mutableSetOf<String>() }
+
     LaunchedEffect(selectedChild) {
         while (isActive) {
             selectedChild?.let { child ->
                 try {
                     val dashboard = RetrofitInstance.api.getChildDashboard(child.code)
-                    val newMessages = dashboard.recent_messages
-                        .sortedBy { it.sent_at }
+                    val newMessages = dashboard.recent_messages.sortedBy { it.sent_at }
+
+                    // Znajdź nowe wiadomości od dziecka których jeszcze nie widzieliśmy
+                    val freshMessages = newMessages.filter { msg ->
+                        msg.sender_device_id != guardianDeviceId &&
+                                msg.id !in seenMessageIds
+                    }
+
+                    // Pokaż powiadomienie dla każdej nowej wiadomości
+                    // (tylko jeśli seenMessageIds nie jest pusty — czyli nie przy pierwszym ładowaniu)
+                    if (seenMessageIds.isNotEmpty()) {
+                        freshMessages.forEach { msg ->
+                            showMessageNotification(context, child.name, msg.content)
+                        }
+                    }
+
+                    // Dodaj wszystkie ID do zbioru widzianych
+                    newMessages.forEach { seenMessageIds.add(it.id) }
 
                     // Oznacz nieprzeczytane wiadomości od dziecka jako przeczytane
                     newMessages.filter {
@@ -70,7 +105,6 @@ fun ChatScreen(
         }
     }
 
-    // Przewiń na dół gdy pojawią się nowe wiadomości
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -98,6 +132,7 @@ fun ChatScreen(
                                     onClick = {
                                         selectedChild = child
                                         messages = emptyList()
+                                        seenMessageIds.clear()
                                         expanded = false
                                     }
                                 )
@@ -148,8 +183,8 @@ fun ChatScreen(
                                     )
                                 )
                                 messages = (messages + sent).sortedBy { it.sent_at }
+                                seenMessageIds.add(sent.id)
                             } catch (e: Exception) {
-                                // Przywróć wiadomość jeśli wysyłanie się nie powiodło
                                 currentMessage = optimisticMsg
                             } finally {
                                 isSending = false
