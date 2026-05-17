@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -20,16 +21,15 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
+    guardianName: String?,       // null = brak parowania lub ładowanie
     onNavigateToPairing: () -> Unit,
     onNavigateToChat: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
     val context = LocalContext.current
-    // Stan kontrolujący wyświetlanie okienka potwierdzenia SOS
     var showSosDialog by remember { mutableStateOf(false) }
 
-    // Okienko dialogowe upewniające się, czy wysłać alarm
     if (showSosDialog) {
         AlertDialog(
             onDismissRequest = { showSosDialog = false },
@@ -45,7 +45,6 @@ fun DashboardScreen(
                 Button(
                     onClick = {
                         showSosDialog = false
-                        // Tutaj w przyszłości wyślesz zapytanie do FastAPI
                         Toast.makeText(context, "Wysłano alarm do rodzica!", Toast.LENGTH_LONG).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -84,7 +83,7 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            // KARTA STATUSU
+            // KARTA STATUSU OCHRONY
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -121,15 +120,14 @@ fun DashboardScreen(
 
             // WIELKI PRZYCISK SOS
             item {
-                Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = { showSosDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(80.dp), // Zwiększona wysokość, żeby był łatwy do trafienia
+                        .height(80.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error, // Zawsze czerwony
+                        containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError
                     )
                 ) {
@@ -139,9 +137,8 @@ fun DashboardScreen(
                 }
             }
 
-            // Główne przyciski
+            // PRZYCISKI NAWIGACYJNE
             item {
-                Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = onNavigateToPairing,
                     modifier = Modifier.fillMaxWidth().height(60.dp)
@@ -156,6 +153,46 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxWidth().height(60.dp)
                 ) {
                     Text("Czat z rodzicem")
+                }
+            }
+
+            // KARTA RODZICA — na dole
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = "Rodzic",
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Twój rodzic",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Text(
+                                text = guardianName ?: "Brak parowania",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (guardianName != null)
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                else
+                                    MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -98,6 +98,15 @@ data class PairingStatusResponse(
     val paired_at: String?
 )
 
+data class GuardianResponse(
+    val pair_id: String,
+    val guardian_device_id: String,
+    val guardian_user_id: String,
+    val username: String,
+    val device_name: String?,
+    val paired_at: String
+)
+
 // --- Location ---
 data class LocationCreateRequest(
     val device_id: String,
@@ -115,6 +124,22 @@ data class LocationResponse(
     val accuracy_meters: Double?,
     val battery_level: Int?,
     val recorded_at: String
+)
+
+// --- Messages ---
+data class MessageResponse(
+    val id: String,
+    val sender_device_id: String,
+    val receiver_device_id: String,
+    val content: String,
+    val sent_at: String,
+    val read_at: String?
+)
+
+data class SendMessageRequest(
+    val sender_device_id: String,
+    val receiver_device_id: String,
+    val content: String
 )
 
 interface FamilyGuardApi {
@@ -143,8 +168,23 @@ interface FamilyGuardApi {
     suspend fun getPairingStatus(@Query("device_id") deviceId: String): PairingStatusResponse
 
     @Headers("Connection: close")
+    @GET("pairing/my-guardian")
+    suspend fun getMyGuardian(@Query("device_id") deviceId: String): GuardianResponse
+
+    @Headers("Connection: close")
     @POST("location")
     suspend fun postLocation(@Body request: LocationCreateRequest): LocationResponse
+
+    @Headers("Connection: close")
+    @POST("messages")
+    suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse
+
+    @Headers("Connection: close")
+    @POST("messages/{message_id}/read")
+    suspend fun markAsRead(
+        @Path("message_id") messageId: String,
+        @Query("device_id") deviceId: String
+    ): MessageResponse
 }
 
 object RetrofitInstance {

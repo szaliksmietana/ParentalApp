@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var currentScreen by remember { mutableStateOf(AppScreen.Login) }
             var childDeviceId by remember { mutableStateOf<String?>(null) }
+            var guardianName by remember { mutableStateOf<String?>(null) }
             val context = LocalContext.current
 
             val permissionsLauncher = rememberLauncherForActivityResult(
@@ -101,7 +102,6 @@ class MainActivity : ComponentActivity() {
                                     val response = RetrofitInstance.api.login(LoginRequest(email, password))
                                     TokenManager.saveToken(response.access_token)
 
-                                    // device_id per email — różni użytkownicy mają osobne wpisy
                                     val savedDeviceId = loadDeviceId(context, email)
                                     if (savedDeviceId != null) {
                                         childDeviceId = savedDeviceId
@@ -169,8 +169,21 @@ class MainActivity : ComponentActivity() {
                 }
 
                 AppScreen.Dashboard -> {
-                    LaunchedEffect(Unit) {
+                    LaunchedEffect(childDeviceId) {
                         refreshTokenIfNeeded()
+
+                        // Pobierz imię rodzica
+                        val deviceId = childDeviceId
+                        if (deviceId != null) {
+                            try {
+                                val guardian = RetrofitInstance.api.getMyGuardian(deviceId)
+                                guardianName = guardian.username
+                                Log.d("API_SUCCESS", "Rodzic: ${guardian.username}")
+                            } catch (e: Exception) {
+                                Log.d("API_INFO", "Brak parowania lub błąd: ${e.message}")
+                                guardianName = null
+                            }
+                        }
 
                         val permissionsToRequest = mutableListOf(
                             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -183,12 +196,14 @@ class MainActivity : ComponentActivity() {
                     }
 
                     DashboardScreen(
+                        guardianName = guardianName,
                         onNavigateToPairing = { currentScreen = AppScreen.Pairing },
                         onNavigateToChat = { currentScreen = AppScreen.Chat },
                         onNavigateToSettings = { currentScreen = AppScreen.Settings },
                         onLogoutClick = {
                             TokenManager.token = null
                             childDeviceId = null
+                            guardianName = null
                             val serviceIntent = Intent(context, LocationTrackingService::class.java)
                             context.stopService(serviceIntent)
                             currentScreen = AppScreen.Login
@@ -198,6 +213,7 @@ class MainActivity : ComponentActivity() {
 
                 AppScreen.Chat -> {
                     ChatScreen(
+                        childDeviceId = childDeviceId ?: "",
                         onNavigateBack = { currentScreen = AppScreen.Dashboard }
                     )
                 }
@@ -220,6 +236,7 @@ class MainActivity : ComponentActivity() {
                         onLogoutClick = {
                             TokenManager.token = null
                             childDeviceId = null
+                            guardianName = null
                             val serviceIntent = Intent(context, LocationTrackingService::class.java)
                             context.stopService(serviceIntent)
                             currentScreen = AppScreen.Login
