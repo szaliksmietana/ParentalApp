@@ -1,6 +1,7 @@
 package com.example.parentalapp.network
 
 import android.content.Context
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
@@ -143,50 +144,39 @@ data class SendMessageRequest(
 )
 
 interface FamilyGuardApi {
-    @Headers("Connection: close")
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): UserResponse
 
-    @Headers("Connection: close")
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): TokenResponse
 
-    @Headers("Connection: close")
     @POST("auth/refresh")
     suspend fun refreshToken(): TokenResponse
 
-    @Headers("Connection: close")
     @POST("devices/register")
     suspend fun registerDevice(@Body request: DeviceRegisterRequest): DeviceResponse
 
-    @Headers("Connection: close")
     @POST("pairing/generate")
     suspend fun generatePairingCode(@Body request: GeneratePairingCodeRequest): PairingCodeResponse
 
-    @Headers("Connection: close")
     @GET("pairing/status")
     suspend fun getPairingStatus(@Query("device_id") deviceId: String): PairingStatusResponse
 
-    @Headers("Connection: close")
     @GET("pairing/my-guardian")
     suspend fun getMyGuardian(@Query("device_id") deviceId: String): GuardianResponse
 
-    @Headers("Connection: close")
     @POST("location")
     suspend fun postLocation(@Body request: LocationCreateRequest): LocationResponse
 
-    @Headers("Connection: close")
     @POST("messages")
     suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse
 
-    @Headers("Connection: close")
     @POST("messages/{message_id}/read")
     suspend fun markAsRead(
         @Path("message_id") messageId: String,
         @Query("device_id") deviceId: String
     ): MessageResponse
 
-    @Headers("Connection: close")
     @GET("messages/history")
     suspend fun getMessageHistory(
         @Query("device_id") deviceId: String,
@@ -201,12 +191,15 @@ object RetrofitInstance {
 
     private val client = OkHttpClient.Builder()
         .protocols(listOf(Protocol.HTTP_1_1))
+        .retryOnConnectionFailure(true)
+        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(logging)
         .addInterceptor { chain ->
             val requestBuilder = chain.request().newBuilder()
+                .removeHeader("Connection")
             TokenManager.token?.let {
                 requestBuilder.addHeader("Authorization", "Bearer $it")
             }
