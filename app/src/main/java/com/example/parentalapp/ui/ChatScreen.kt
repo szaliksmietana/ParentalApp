@@ -101,7 +101,7 @@ fun ChatScreen(
                     // Ignoruj błędy pollingu
                 }
             }
-            delay(10000)
+            delay(1_000)
         }
     }
 

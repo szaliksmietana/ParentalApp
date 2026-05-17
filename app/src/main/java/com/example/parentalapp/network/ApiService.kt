@@ -174,6 +174,12 @@ interface FamilyGuardApi {
     @GET("location/{child_device_id}/latest")
     suspend fun getLatestLocation(@Path("child_device_id") childDeviceId: String): LocationResponse
 
+    @GET("location/{child_device_id}/history")
+    suspend fun getLocationHistory(
+        @Path("child_device_id") childDeviceId: String,
+        @Query("hours") hours: Int = 24
+    ): List<LocationResponse>
+
     @GET("dashboard/child/{child_device_id}")
     suspend fun getChildDashboard(@Path("child_device_id") childDeviceId: String): ChildDashboardResponse
 
