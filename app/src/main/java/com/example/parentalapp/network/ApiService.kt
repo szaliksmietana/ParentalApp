@@ -19,7 +19,7 @@ object AppConfig {
             context.assets.open("config.properties").use { props.load(it) }
             baseUrl = props.getProperty("BASE_URL", baseUrl)
         } catch (e: Exception) {
-            // Fallback jeśli brak pliku
+            // Fallback
         }
     }
 
@@ -144,6 +144,13 @@ data class ChildDashboardResponse(
     val recent_messages: List<MessageResponse>
 )
 
+// --- Messages ---
+data class SendMessageRequest(
+    val sender_device_id: String,
+    val receiver_device_id: String,
+    val content: String
+)
+
 interface FamilyGuardApi {
     @Headers("Connection: close")
     @POST("auth/register")
@@ -176,6 +183,17 @@ interface FamilyGuardApi {
     @Headers("Connection: close")
     @GET("dashboard/child/{child_device_id}")
     suspend fun getChildDashboard(@Path("child_device_id") childDeviceId: String): ChildDashboardResponse
+
+    @Headers("Connection: close")
+    @POST("messages")
+    suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse
+
+    @Headers("Connection: close")
+    @POST("messages/{message_id}/read")
+    suspend fun markAsRead(
+        @Path("message_id") messageId: String,
+        @Query("device_id") deviceId: String
+    ): MessageResponse
 }
 
 object RetrofitInstance {

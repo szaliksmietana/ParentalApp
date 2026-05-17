@@ -53,7 +53,6 @@ class MainActivity : ComponentActivity() {
     private var parentDeviceId: String? = null
     private val PREFS_NAME = "parentalapp_prefs"
 
-    // Zapisuje device_id per email — różni użytkownicy mają różne device_id
     private fun saveDeviceId(context: Context, email: String, deviceId: String) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString("device_id_$email", deviceId).apply()
@@ -64,7 +63,6 @@ class MainActivity : ComponentActivity() {
             .getString("device_id_$email", null)
     }
 
-    // Unikalny identyfikator urządzenia (nie zmienia się przy reinstalacji od Android 8+)
     private fun getHardwareId(context: Context): String {
         return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
     }
@@ -109,13 +107,11 @@ class MainActivity : ComponentActivity() {
                                     val response = RetrofitInstance.api.login(LoginRequest(email, password))
                                     TokenManager.saveToken(response.access_token)
 
-                                    // Sprawdź czy mamy device_id dla tego konkretnego emaila
                                     val savedDeviceId = loadDeviceId(context, email)
                                     if (savedDeviceId != null) {
                                         parentDeviceId = savedDeviceId
                                         Log.d("API_SUCCESS", "Używam zapisanego device_id dla $email: $parentDeviceId")
                                     } else {
-                                        // Zarejestruj urządzenie z hardware_id
                                         val hardwareId = getHardwareId(context)
                                         val device = RetrofitInstance.api.registerDevice(
                                             DeviceRegisterRequest(
@@ -257,6 +253,7 @@ class MainActivity : ComponentActivity() {
                     ChatScreen(
                         childrenList = childrenList,
                         initialChild = selectedChild,
+                        guardianDeviceId = parentDeviceId ?: "",
                         onNavigateBack = {
                             dashboardRefreshKey++
                             currentScreen = AppScreen.Dashboard
