@@ -29,9 +29,11 @@ import com.example.parentalapp.ui.AddChildScreen
 import com.example.parentalapp.ui.ChatScreen
 import com.example.parentalapp.ui.DashboardScreen
 import com.example.parentalapp.ui.LoginScreen
+import com.example.parentalapp.ui.NotificationHelper
 import com.example.parentalapp.ui.RegisterScreen
 import com.example.parentalapp.ui.SettingsScreen
-import com.example.parentalapp.ui.NotificationHelper
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
@@ -74,10 +76,12 @@ class MainActivity : ComponentActivity() {
 
         AppConfig.init(this)
         NotificationHelper.createChannels(this)
+
         setContent {
             var currentScreen by remember { mutableStateOf(AppScreen.Login) }
             var childDeviceId by remember { mutableStateOf<String?>(null) }
             var guardianName by remember { mutableStateOf<String?>(null) }
+            val seenMessageIds = remember { mutableSetOf<String>() }
             val context = LocalContext.current
 
             val permissionsLauncher = rememberLauncherForActivityResult(
@@ -91,6 +95,39 @@ class MainActivity : ComponentActivity() {
                     } else {
                         context.startService(serviceIntent)
                     }
+                }
+            }
+
+            // Polling co 10s — aktywny tylko na dashboardzie
+            LaunchedEffect(currentScreen) {
+                if (currentScreen != AppScreen.Dashboard) return@LaunchedEffect
+
+                while (isActive) {
+                    val deviceId = childDeviceId
+                    if (deviceId != null && TokenManager.token != null) {
+                        try {
+                            val history = RetrofitInstance.api.getMessageHistory(deviceId)
+                            val sorted = history.sortedBy { it.sent_at }
+
+                            // Nowe wiadomości od rodzica
+                            val freshFromGuardian = sorted.filter { msg ->
+                                msg.receiver_device_id == deviceId && msg.id !in seenMessageIds
+                            }
+
+                            if (seenMessageIds.isNotEmpty()) {
+                                freshFromGuardian.forEach { msg ->
+                                    NotificationHelper.showMessageNotification(context, msg.content)
+                                }
+                            }
+
+                            sorted.forEach { seenMessageIds.add(it.id) }
+                            Log.d("POLLING", "Sprawdzono wiadomości: ${sorted.size}, nowych: ${freshFromGuardian.size}")
+
+                        } catch (e: Exception) {
+                            Log.d("POLLING", "Błąd pollingu wiadomości: ${e.message}")
+                        }
+                    }
+                    delay(10000)
                 }
             }
 
@@ -173,7 +210,6 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(childDeviceId) {
                         refreshTokenIfNeeded()
 
-                        // Pobierz imię rodzica
                         val deviceId = childDeviceId
                         if (deviceId != null) {
                             try {
@@ -205,6 +241,7 @@ class MainActivity : ComponentActivity() {
                             TokenManager.token = null
                             childDeviceId = null
                             guardianName = null
+                            seenMessageIds.clear()
                             val serviceIntent = Intent(context, LocationTrackingService::class.java)
                             context.stopService(serviceIntent)
                             currentScreen = AppScreen.Login
@@ -238,6 +275,7 @@ class MainActivity : ComponentActivity() {
                             TokenManager.token = null
                             childDeviceId = null
                             guardianName = null
+                            seenMessageIds.clear()
                             val serviceIntent = Intent(context, LocationTrackingService::class.java)
                             context.stopService(serviceIntent)
                             currentScreen = AppScreen.Login
