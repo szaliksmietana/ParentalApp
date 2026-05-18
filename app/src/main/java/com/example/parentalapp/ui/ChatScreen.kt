@@ -1,7 +1,5 @@
 package com.example.parentalapp.ui
 
-import android.app.NotificationManager
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationCompat
 import com.example.parentalapp.ChildData
 import com.example.parentalapp.network.MessageResponse
 import com.example.parentalapp.network.RetrofitInstance
@@ -28,18 +25,6 @@ import com.example.parentalapp.network.SendMessageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-
-private fun showMessageNotification(context: Context, senderName: String, content: String) {
-    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    val notification = NotificationCompat.Builder(context, "geofence_alerts")
-        .setSmallIcon(android.R.drawable.ic_dialog_email)
-        .setContentTitle("Nowa wiadomość od $senderName")
-        .setContentText(content)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setAutoCancel(true)
-        .build()
-    manager.notify(System.currentTimeMillis().toInt(), notification)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +43,6 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Zbiór ID wiadomości które już widzieliśmy — żeby nie powiadamiać o starych
     val seenMessageIds = remember { mutableSetOf<String>() }
 
     LaunchedEffect(selectedChild) {
@@ -68,40 +52,30 @@ fun ChatScreen(
                     val dashboard = RetrofitInstance.api.getChildDashboard(child.code)
                     val newMessages = dashboard.recent_messages.sortedBy { it.sent_at }
 
-                    // Znajdź nowe wiadomości od dziecka których jeszcze nie widzieliśmy
                     val freshMessages = newMessages.filter { msg ->
-                        msg.sender_device_id != guardianDeviceId &&
-                                msg.id !in seenMessageIds
+                        msg.sender_device_id != guardianDeviceId && msg.id !in seenMessageIds
                     }
 
-                    // Pokaż powiadomienie dla każdej nowej wiadomości
-                    // (tylko jeśli seenMessageIds nie jest pusty — czyli nie przy pierwszym ładowaniu)
                     if (seenMessageIds.isNotEmpty()) {
                         freshMessages.forEach { msg ->
                             showMessageNotification(context, child.name, msg.content)
                         }
                     }
 
-                    // Dodaj wszystkie ID do zbioru widzianych
                     newMessages.forEach { seenMessageIds.add(it.id) }
 
-                    // Oznacz nieprzeczytane wiadomości od dziecka jako przeczytane
                     newMessages.filter {
                         it.receiver_device_id == guardianDeviceId && it.read_at == null
                     }.forEach { msg ->
                         try {
                             RetrofitInstance.api.markAsRead(msg.id, guardianDeviceId)
-                        } catch (e: Exception) {
-                            // Ignoruj błędy oznaczania
-                        }
+                        } catch (e: Exception) { }
                     }
 
                     messages = newMessages
-                } catch (e: Exception) {
-                    // Ignoruj błędy pollingu
-                }
+                } catch (e: Exception) { }
             }
-            delay(1_000)
+            delay(10000)
         }
     }
 
@@ -149,9 +123,7 @@ fun ChatScreen(
         },
         bottomBar = {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
@@ -168,11 +140,9 @@ fun ChatScreen(
                         val child = selectedChild ?: return@IconButton
                         val content = currentMessage.trim()
                         if (content.isBlank() || isSending) return@IconButton
-
                         isSending = true
                         val optimisticMsg = currentMessage
                         currentMessage = ""
-
                         scope.launch {
                             try {
                                 val sent = RetrofitInstance.api.sendMessage(
@@ -199,11 +169,7 @@ fun ChatScreen(
                     enabled = selectedChild != null && !isSending
                 ) {
                     if (isSending) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                     } else {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Wyślij", tint = Color.White)
                     }
@@ -212,19 +178,13 @@ fun ChatScreen(
         }
     ) { paddingValues ->
         if (selectedChild == null) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                 Text("Dodaj i wybierz dziecko, aby rozpocząć czat.")
             }
         } else {
             LazyColumn(
                 state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
@@ -258,19 +218,10 @@ fun ChatBubble(
             Text(
                 text = content,
                 color = textColor,
-                modifier = Modifier
-                    .background(backgroundColor, RoundedCornerShape(16.dp))
-                    .padding(12.dp)
+                modifier = Modifier.background(backgroundColor, RoundedCornerShape(16.dp)).padding(12.dp)
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = time,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(text = time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 if (isFromParent) {
                     Text(
                         text = if (isRead) "✓✓" else "✓",

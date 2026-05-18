@@ -35,13 +35,21 @@ import com.example.parentalapp.ui.LoginScreen
 import com.example.parentalapp.ui.MapScreen
 import com.example.parentalapp.ui.RegisterScreen
 import com.example.parentalapp.ui.SettingsScreen
+import com.example.parentalapp.ui.ZoneStorage
+import com.example.parentalapp.ui.distanceMeters
+import com.example.parentalapp.ui.showGeofenceNotification
+import com.example.parentalapp.ui.showMessageNotification
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
 data class ChildData(
     val name: String,
     val code: String,
-    val batteryLevel: Int? = null
+    val batteryLevel: Int? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 enum class AppScreen {
@@ -92,11 +100,99 @@ class MainActivity : ComponentActivity() {
             var pairingError by remember { mutableStateOf<String?>(null) }
             var dashboardRefreshKey by remember { mutableIntStateOf(0) }
 
+            // Zbiór ID wiadomości już widzianych — żeby nie duplikować powiadomień
+            val seenMessageIds = remember { mutableSetOf<String>() }
+            // Zbiór aktywnych naruszeń stref — klucz: "childCode_zoneName"
+            // Powiadomienie tylko przy WEJŚCIU w naruszenie, nie przy każdym pollingu
+            val violatedZones = remember { mutableSetOf<String>() }
+
             val context = LocalContext.current
 
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission()
             ) { _ -> }
+
+            // Polling co 10s — aktywny gdy jesteśmy na dashboardzie
+            LaunchedEffect(currentScreen) {
+                if (currentScreen != AppScreen.Dashboard) return@LaunchedEffect
+
+                while (isActive) {
+                    val deviceId = parentDeviceId
+                    if (deviceId != null && TokenManager.token != null) {
+                        try {
+                            val fetchedChildren = RetrofitInstance.api.getChildren(deviceId)
+
+                            val updatedList = fetchedChildren.map { child ->
+                                try {
+                                    val dashboard = RetrofitInstance.api.getChildDashboard(child.child_device_id)
+
+                                    // --- Sprawdź strefy ---
+                                    val zones = ZoneStorage.loadZones(context, child.child_device_id)
+                                    val lat = dashboard.latest_location?.latitude
+                                    val lon = dashboard.latest_location?.longitude
+                                    if (lat != null && lon != null) {
+                                        zones.forEach { zone ->
+                                            val key = "${child.child_device_id}_${zone.name}"
+                                            val dist = distanceMeters(lat, lon, zone.latitude, zone.longitude)
+                                            val isViolated = dist > zone.radiusMeters
+                                            if (isViolated && key !in violatedZones) {
+                                                // Nowe naruszenie — wyślij powiadomienie i zapamiętaj
+                                                showGeofenceNotification(context, child.username, zone.name, dist)
+                                                violatedZones.add(key)
+                                            } else if (!isViolated) {
+                                                // Dziecko wróciło do strefy — usuń z naruszeń
+                                                violatedZones.remove(key)
+                                            }
+                                        }
+                                    }
+
+                                    // --- Sprawdź nowe wiadomości ---
+                                    val freshMessages = dashboard.recent_messages.filter { msg ->
+                                        msg.sender_device_id != deviceId &&
+                                                msg.id !in seenMessageIds
+                                    }
+                                    if (seenMessageIds.isNotEmpty()) {
+                                        freshMessages.forEach { msg ->
+                                            showMessageNotification(context, child.username, msg.content)
+                                        }
+                                    }
+                                    dashboard.recent_messages.forEach { seenMessageIds.add(it.id) }
+
+                                    ChildData(
+                                        name = child.username,
+                                        code = child.child_device_id,
+                                        batteryLevel = dashboard.latest_location?.battery_level,
+                                        latitude = lat,
+                                        longitude = lon
+                                    )
+                                } catch (e: Exception) {
+                                    // Zachowaj stare dane jeśli call się nie powiedzie
+                                    childrenList.find { it.code == child.child_device_id }
+                                        ?: ChildData(name = child.username, code = child.child_device_id)
+                                }
+                            }
+
+                            childrenList = updatedList
+                            Log.d("POLLING", "Odświeżono ${updatedList.size} dzieci")
+
+                        } catch (e: HttpException) {
+                            Log.e("API_ERROR", "Polling HTTP ${e.code()}")
+                            if (e.code() == 401) {
+                                try {
+                                    val refreshed = RetrofitInstance.api.refreshToken()
+                                    TokenManager.saveToken(refreshed.access_token)
+                                } catch (re: Exception) {
+                                    TokenManager.token = null
+                                    currentScreen = AppScreen.Login
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("API_ERROR", "Polling błąd: ${e.message}")
+                        }
+                    }
+                    delay(10000)
+                }
+            }
 
             when (currentScreen) {
                 AppScreen.Login -> {
@@ -169,46 +265,7 @@ class MainActivity : ComponentActivity() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
-
                         refreshTokenIfNeeded()
-
-                        val deviceId = parentDeviceId
-                        Log.d("DEBUG", "parentDeviceId = $deviceId, refreshKey = $dashboardRefreshKey")
-
-                        if (deviceId != null) {
-                            try {
-                                val fetchedChildren = RetrofitInstance.api.getChildren(deviceId)
-
-                                childrenList = fetchedChildren.map { child ->
-                                    val battery = try {
-                                        val dashboard = RetrofitInstance.api.getChildDashboard(child.child_device_id)
-                                        dashboard.latest_location?.battery_level
-                                    } catch (e: Exception) {
-                                        null
-                                    }
-                                    ChildData(
-                                        name = child.username,
-                                        code = child.child_device_id,
-                                        batteryLevel = battery
-                                    )
-                                }
-                                Log.d("API_SUCCESS", "Pobrano ${childrenList.size} dzieci.")
-                            } catch (e: HttpException) {
-                                Log.e("API_ERROR", "HTTP ${e.code()}: ${e.response()?.errorBody()?.string()}")
-                                if (e.code() == 401) {
-                                    try {
-                                        val refreshed = RetrofitInstance.api.refreshToken()
-                                        TokenManager.saveToken(refreshed.access_token)
-                                        dashboardRefreshKey++
-                                    } catch (re: Exception) {
-                                        TokenManager.token = null
-                                        currentScreen = AppScreen.Login
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.e("API_ERROR", "Błąd pobierania dzieci: ${e.message}")
-                            }
-                        }
                     }
 
                     DashboardScreen(
@@ -233,6 +290,8 @@ class MainActivity : ComponentActivity() {
                         onLogoutClick = {
                             TokenManager.token = null
                             parentDeviceId = null
+                            seenMessageIds.clear()
+                            violatedZones.clear()
                             currentScreen = AppScreen.Login
                         }
                     )
@@ -316,6 +375,7 @@ class MainActivity : ComponentActivity() {
                         onLogoutClick = {
                             TokenManager.token = null
                             parentDeviceId = null
+                            seenMessageIds.clear()
                             currentScreen = AppScreen.Login
                         }
                     )

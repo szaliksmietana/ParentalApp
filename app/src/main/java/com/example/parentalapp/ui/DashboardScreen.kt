@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.parentalapp.ChildData
 
@@ -28,6 +29,8 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
+    val context = LocalContext.current
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,6 +78,28 @@ fun DashboardScreen(
                 }
             } else {
                 items(childrenList) { child ->
+                    // Pobierz strefy i oblicz status dla tego dziecka
+                    val zones = ZoneStorage.loadZones(context, child.code)
+                    val zoneStatuses = zones.mapNotNull { zone ->
+                        val lat = child.latitude ?: return@mapNotNull null
+                        val lon = child.longitude ?: return@mapNotNull null
+                        val dist = distanceMeters(lat, lon, zone.latitude, zone.longitude)
+                        Triple(zone.name, dist, dist <= zone.radiusMeters)
+                    }
+
+                    // Bezpieczny jeśli jest w przynajmniej jednej strefie
+                    val inAnyZone = zoneStatuses.any { it.third }
+                    val statusColor = when {
+                        zones.isEmpty() -> Color(0xFF9E9E9E)
+                        inAnyZone -> Color(0xFF4CAF50)
+                        else -> Color(0xFFF44336)
+                    }
+                    val statusText = when {
+                        zones.isEmpty() -> "Brak stref (dodaj na mapie)"
+                        inAnyZone -> "Bezpieczny — " + zoneStatuses.first { it.third }.first
+                        else -> "⚠️ Poza wszystkimi strefami!"
+                    }
+
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -89,20 +114,25 @@ fun DashboardScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(12.dp)
-                                        .background(Color.Green, CircleShape)
+                                        .background(statusColor, CircleShape)
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = child.name, style = MaterialTheme.typography.titleLarge)
-                                    Text(text = "Status: Bezpieczny (w strefie)", style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        text = statusText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (inAnyZone || zones.isEmpty()) MaterialTheme.colorScheme.secondary
+                                        else MaterialTheme.colorScheme.error
+                                    )
                                 }
 
-                                // Poziom baterii po prawej stronie
+                                // Bateria po prawej
                                 child.batteryLevel?.let { battery ->
                                     val batteryColor = when {
-                                        battery >= 50 -> Color(0xFF4CAF50) // zielony
-                                        battery >= 20 -> Color(0xFFFF9800) // pomarańczowy
-                                        else -> Color(0xFFF44336)          // czerwony
+                                        battery >= 50 -> Color(0xFF4CAF50)
+                                        battery >= 20 -> Color(0xFFFF9800)
+                                        else -> Color(0xFFF44336)
                                     }
                                     Text(
                                         text = "🔋 $battery%",
@@ -116,7 +146,20 @@ fun DashboardScreen(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            // Szczegółowy status stref
+                            if (zoneStatuses.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                zoneStatuses.forEach { (name, dist, inZone) ->
+                                    Text(
+                                        text = "${if (inZone) "✅" else "⚠️"} $name: ${dist.toInt()} m",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (inZone) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             // Pasek baterii
                             child.batteryLevel?.let { battery ->
@@ -135,7 +178,7 @@ fun DashboardScreen(
                                     modifier = Modifier.fillMaxWidth().height(8.dp),
                                     color = batteryColor
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
 
                             Row(horizontalArrangement = Arrangement.SpaceBetween) {
