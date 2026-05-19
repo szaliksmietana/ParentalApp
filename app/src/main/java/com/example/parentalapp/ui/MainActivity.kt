@@ -81,7 +81,6 @@ class MainActivity : ComponentActivity() {
             var currentScreen by remember { mutableStateOf(AppScreen.Login) }
             var childDeviceId by remember { mutableStateOf<String?>(null) }
             var guardianName by remember { mutableStateOf<String?>(null) }
-
             val seenMessageIds = remember { mutableSetOf<String>() }
             val context = LocalContext.current
 

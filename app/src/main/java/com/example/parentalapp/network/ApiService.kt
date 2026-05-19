@@ -127,12 +127,8 @@ data class LocationResponse(
     val recorded_at: String
 )
 
-// --- SOS ---
-data class SosAlertResponse(
-    val id: String,
-    val child_device_id: String,
-    val child_username: String,
-    val created_at: String
+data class SosRequest(
+    val device_id: String
 )
 
 // --- Messages ---
@@ -145,8 +141,10 @@ data class MessageResponse(
     val read_at: String?
 )
 
-data class SosRequest(
-    val device_id: String
+data class SendMessageRequest(
+    val sender_device_id: String,
+    val receiver_device_id: String,
+    val content: String
 )
 
 interface FamilyGuardApi {

@@ -25,8 +25,8 @@ fun DashboardScreen(
     onNavigateToPairing: () -> Unit,
     onNavigateToChat: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onLogoutClick: () -> Unit,
-    onSosTriggered: () -> Unit
+    onSosTriggered: () -> Unit,
+    onLogoutClick: () -> Unit
 ) {
     val context = LocalContext.current
     var showSosDialog by remember { mutableStateOf(false) }
