@@ -1,19 +1,21 @@
 package com.example.parentalapp.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.parentalapp.R
 
 @Composable
 fun LoginScreen(
     onLoginClick: (String, String) -> Unit,
-    onRegisterClick: () -> Unit // Nowy parametr wywołujący przejście
+    onRegisterClick: () -> Unit
 ) {
-    // Stany przechowujące to, co użytkownik wpisze w pola tekstowe
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -24,6 +26,15 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Logo FamilyGuard
+        Image(
+            painter = painterResource(id = R.drawable.logo_familyguard),
+            contentDescription = "FamilyGuard Logo",
+            modifier = Modifier
+                .size(160.dp)
+                .padding(bottom = 8.dp)
+        )
+
         Text(
             text = "Panel Rodzica",
             style = MaterialTheme.typography.headlineMedium
@@ -59,7 +70,6 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Nowy przycisk do rejestracji
         TextButton(
             onClick = onRegisterClick,
             modifier = Modifier.fillMaxWidth()
