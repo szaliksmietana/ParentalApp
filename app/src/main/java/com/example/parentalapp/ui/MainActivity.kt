@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
             var currentScreen by remember { mutableStateOf(AppScreen.Login) }
             var childDeviceId by remember { mutableStateOf<String?>(null) }
             var guardianName by remember { mutableStateOf<String?>(null) }
+
             val seenMessageIds = remember { mutableSetOf<String>() }
             val context = LocalContext.current
 
@@ -237,6 +238,26 @@ class MainActivity : ComponentActivity() {
                         onNavigateToPairing = { currentScreen = AppScreen.Pairing },
                         onNavigateToChat = { currentScreen = AppScreen.Chat },
                         onNavigateToSettings = { currentScreen = AppScreen.Settings },
+
+                        // NOWE: Obsługa kliknięcia przycisku SOS
+                        onSosTriggered = {
+                            val deviceId = childDeviceId
+                            if (deviceId != null) {
+                                lifecycleScope.launch {
+                                    try {
+                                        RetrofitInstance.api.triggerSos(com.example.parentalapp.network.SosRequest(deviceId))
+                                        Toast.makeText(context, "Alarm SOS wysłany do rodzica!", Toast.LENGTH_LONG).show()
+                                        Log.d("SOS_ACTION", "Wysłano alarm dla urządzenia: $deviceId")
+                                    } catch (e: Exception) {
+                                        Log.e("API_ERROR", "Nie udało się wysłać alarmu SOS: ${e.message}")
+                                        Toast.makeText(context, "Błąd wysyłania alarmu! Sprawdź sieć.", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            } else {
+                                Toast.makeText(context, "Błąd: Brak przypisanego urządzenia", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+
                         onLogoutClick = {
                             TokenManager.token = null
                             childDeviceId = null

@@ -25,7 +25,8 @@ fun DashboardScreen(
     onNavigateToPairing: () -> Unit,
     onNavigateToChat: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onLogoutClick: () -> Unit
+    onLogoutClick: () -> Unit,
+    onSosTriggered: () -> Unit
 ) {
     val context = LocalContext.current
     var showSosDialog by remember { mutableStateOf(false) }
@@ -121,7 +122,7 @@ fun DashboardScreen(
             // WIELKI PRZYCISK SOS
             item {
                 Button(
-                    onClick = { showSosDialog = true },
+                    onClick = { onSosTriggered() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(80.dp),

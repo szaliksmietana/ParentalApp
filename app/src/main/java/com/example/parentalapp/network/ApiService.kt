@@ -127,6 +127,14 @@ data class LocationResponse(
     val recorded_at: String
 )
 
+// --- SOS ---
+data class SosAlertResponse(
+    val id: String,
+    val child_device_id: String,
+    val child_username: String,
+    val created_at: String
+)
+
 // --- Messages ---
 data class MessageResponse(
     val id: String,
@@ -137,10 +145,8 @@ data class MessageResponse(
     val read_at: String?
 )
 
-data class SendMessageRequest(
-    val sender_device_id: String,
-    val receiver_device_id: String,
-    val content: String
+data class SosRequest(
+    val device_id: String
 )
 
 interface FamilyGuardApi {
@@ -182,6 +188,9 @@ interface FamilyGuardApi {
         @Query("device_id") deviceId: String,
         @Query("limit") limit: Int = 40
     ): List<MessageResponse>
+
+    @POST("sos")
+    suspend fun triggerSos(@Body request: SosRequest)
 }
 
 object RetrofitInstance {
