@@ -43,6 +43,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import com.example.parentalapp.network.SosAlertResponse
+import com.example.parentalapp.ui.showSosNotification
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 data class ChildData(
     val name: String,
@@ -99,6 +110,8 @@ class MainActivity : ComponentActivity() {
             var pairingLoading by remember { mutableStateOf(false) }
             var pairingError by remember { mutableStateOf<String?>(null) }
             var dashboardRefreshKey by remember { mutableIntStateOf(0) }
+            var activeSosAlerts by remember { mutableStateOf<List<SosAlertResponse>>(emptyList()) }
+
 
             // Zbiór ID wiadomości już widzianych — żeby nie duplikować powiadomień
             val seenMessageIds = remember { mutableSetOf<String>() }
@@ -112,6 +125,27 @@ class MainActivity : ComponentActivity() {
                 contract = ActivityResultContracts.RequestPermission()
             ) { _ -> }
 
+            // Globalny Polling SOS (co 5 sekund)
+            LaunchedEffect(parentDeviceId, TokenManager.token) {
+                while (isActive) {
+                    if (parentDeviceId != null && TokenManager.token != null) {
+                        try {
+                            val pendingSos = RetrofitInstance.api.getPendingSos(parentDeviceId!!)
+
+                            // Wyślij powiadomienie z dźwiękiem tylko jeśli alarm jest nowy (nie ma go na naszej liście)
+                            pendingSos.forEach { sos ->
+                                if (activeSosAlerts.none { it.id == sos.id }) {
+                                    showSosNotification(context, sos.child_username)
+                                }
+                            }
+                            activeSosAlerts = pendingSos
+                        } catch (e: Exception) {
+                            Log.e("API_ERROR", "SOS Polling błąd: ${e.message}")
+                        }
+                    }
+                    delay(5000) // Polling dokładnie co 5 sekund
+                }
+            }
             // Polling co 10s — aktywny gdy jesteśmy na dashboardzie
             LaunchedEffect(currentScreen) {
                 if (currentScreen != AppScreen.Dashboard) return@LaunchedEffect
@@ -380,6 +414,49 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+            }
+            // 🚨 GLOBALNE OKNO ALARMU SOS 🚨
+            if (activeSosAlerts.isNotEmpty()) {
+                AlertDialog(
+                    onDismissRequest = { /* Puste, aby nie pozwolić rodzicowi kliknąć w tło i pominąć alarmu! */ },
+                    title = {
+                        Text(
+                            text = "🚨 ALARM SOS!",
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium
+                        )
+                    },
+                    text = {
+                        Column {
+                            Text("Następujące dzieci wezwały natychmiastową pomoc:", style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            activeSosAlerts.forEach { sos ->
+                                Text("• ${sos.child_username}", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val deviceId = parentDeviceId ?: return@Button
+                                lifecycleScope.launch {
+                                    try {
+                                        // Pętla wysyła potwierdzenie na serwer dla każdego odebranego alarmu
+                                        activeSosAlerts.forEach { sos ->
+                                            RetrofitInstance.api.acknowledgeSos(sos.id, deviceId)
+                                        }
+                                        activeSosAlerts = emptyList() // Ukrywamy okno po wysłaniu akceptacji
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Błąd potwierdzenia SOS! Spróbuj ponownie.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Przyjąłem (Odwołaj alarm)")
+                        }
+                    }
+                )
             }
         }
     }

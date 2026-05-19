@@ -152,6 +152,13 @@ data class SendMessageRequest(
     val content: String
 )
 
+data class SosAlertResponse(
+    val id: String,
+    val child_device_id: String,
+    val child_username: String,
+    val created_at: String
+)
+
 interface FamilyGuardApi {
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): UserResponse
@@ -191,6 +198,16 @@ interface FamilyGuardApi {
         @Path("message_id") messageId: String,
         @Query("device_id") deviceId: String
     ): MessageResponse
+
+    @GET("sos/pending")
+    suspend fun getPendingSos(@Query("device_id") deviceId: String): List<SosAlertResponse>
+
+    // Potwierdzenie (odwołanie) alarmu SOS
+    @POST("sos/{sos_id}/acknowledge")
+    suspend fun acknowledgeSos(
+        @Path("sos_id") sosId: String,
+        @Query("device_id") deviceId: String
+    )
 }
 
 object RetrofitInstance {
