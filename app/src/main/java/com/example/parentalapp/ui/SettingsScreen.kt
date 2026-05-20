@@ -1,28 +1,30 @@
 package com.example.parentalapp.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
-    onLogoutClick: () -> Unit // Dodajemy akcję wylogowania
+    onLogoutClick: () -> Unit
 ) {
-    // Stany przechowujące aktualne ustawienia (później można je zapisać w pamięci telefonu)
-    var geofenceNotifications by remember { mutableStateOf(true) }
-    var chatNotifications by remember { mutableStateOf(true) }
-    var locationUpdateFreq by remember { mutableFloatStateOf(15f) } // Wartość w minutach
+    val context = LocalContext.current
+    var settings by remember { mutableStateOf(SettingsManager.settings) }
 
-    // NOWE STANY: Promień strefy i limit czasu
-    var geofenceRadius by remember { mutableFloatStateOf(100f) } // Wartość w metrach (od 50 do 2000)
-    var dailyScreenTimeLimit by remember { mutableFloatStateOf(120f) } // Wartość w minutach (od 30 do 300)
+    fun update(new: AppSettings) {
+        settings = new
+        SettingsManager.save(context, new)
+    }
 
     Scaffold(
         topBar = {
@@ -40,83 +42,160 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            // Sekcja Powiadomień i Stref
-            Text("Geofencing i Powiadomienia", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Wyjście dziecka ze strefy")
-                Switch(checked = geofenceNotifications, onCheckedChange = { geofenceNotifications = it })
+            // ── 1. POLLING ────────────────────────────────────────────────
+            SectionHeader("Częstotliwość odświeżania danych")
+            Text(
+                "Wpływa na zużycie baterii i transferu danych.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            PollingInterval.entries.forEach { interval ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = settings.pollingInterval == interval,
+                        onClick = { update(settings.copy(pollingInterval = interval)) }
+                    )
+                    Text(interval.label, style = MaterialTheme.typography.bodyMedium)
+                }
             }
 
-            // NOWE: Suwak promienia strefy (pokazujemy tylko jeśli powiadomienia są włączone)
-            if (geofenceNotifications) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Promień bezpiecznej strefy: ${geofenceRadius.toInt()} m", style = MaterialTheme.typography.bodyMedium)
-                Slider(
-                    value = geofenceRadius,
-                    onValueChange = { geofenceRadius = it },
-                    valueRange = 50f..2000f,
-                    steps = 38 // Krok co 50 metrów
-                )
-            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // ── 2. POWIADOMIENIA ──────────────────────────────────────────
+            SectionHeader("Zarządzanie alertami")
+
+            SettingSwitch(
+                label = "Powiadomienia o wiadomościach (Czat)",
+                checked = settings.chatNotificationsEnabled,
+                onCheckedChange = { update(settings.copy(chatNotificationsEnabled = it)) }
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Nowe wiadomości na czacie")
-                Switch(checked = chatNotifications, onCheckedChange = { chatNotifications = it })
+            SettingSwitch(
+                label = "Alerty Geofence (Wyjście ze strefy)",
+                checked = settings.geofenceNotificationsEnabled,
+                onCheckedChange = { update(settings.copy(geofenceNotificationsEnabled = it)) }
+            )
+
+            if (settings.geofenceNotificationsEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Tolerancja błędu GPS: +${settings.gpsToleranceMeters} m",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "Ignoruje drobne wyskoki lokalizacji (przydatne w budynkach)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Slider(
+                    value = settings.gpsToleranceMeters.toFloat(),
+                    onValueChange = { update(settings.copy(gpsToleranceMeters = it.toInt())) },
+                    valueRange = 0f..200f,
+                    steps = 7
+                )
             }
 
-            Divider(modifier = Modifier.padding(vertical = 24.dp))
+            // SOS zawsze włączony — informacja dla rodzica
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "🚨 Alarm SOS jest zawsze aktywny i nie może być wyłączony.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
 
-            // NOWE: Sekcja Zarządzania Czasem
-            Text("Zarządzanie Czasem Ekranowym", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            Text("Dzienny limit czasu: ${dailyScreenTimeLimit.toInt()} min", style = MaterialTheme.typography.bodyMedium)
-            Slider(
-                value = dailyScreenTimeLimit,
-                onValueChange = { dailyScreenTimeLimit = it },
-                valueRange = 30f..300f, // Od 30 min do 5 godzin
-                steps = 8 // Krok co 30 minut
-            )
+            // ── 3. STYL MAPY ──────────────────────────────────────────────
+            SectionHeader("Domyślny styl mapy")
 
-            Divider(modifier = Modifier.padding(vertical = 24.dp))
+            MapStyle.entries.forEach { style ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = settings.mapStyle == style,
+                        onClick = { update(settings.copy(mapStyle = style)) }
+                    )
+                    Text(style.label, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
 
-            // Sekcja Oszczędzania Baterii / GPS
-            Text("Lokalizacja i Bateria", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            Text("Częstotliwość odświeżania mapy: ${locationUpdateFreq.toInt()} min", style = MaterialTheme.typography.bodyMedium)
-            Slider(
-                value = locationUpdateFreq,
-                onValueChange = { locationUpdateFreq = it },
-                valueRange = 1f..60f, // Od 1 do 60 minut
-                steps = 59
-            )
+            // ── 4. MOTYW ──────────────────────────────────────────────────
+            SectionHeader("Motyw aplikacji")
 
-            // Wypycha przycisk wylogowania na sam dół ekranu
-            Spacer(modifier = Modifier.weight(1f))
+            AppTheme.entries.forEach { theme ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = settings.appTheme == theme,
+                        onClick = { update(settings.copy(appTheme = theme)) }
+                    )
+                    Text(theme.label, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
             Button(
                 onClick = onLogoutClick,
                 modifier = Modifier.fillMaxWidth(),
-                // Ustawiamy kolor przycisku na czerwony (error), aby sugerował akcję destrukcyjną
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
                 Text("Wyloguj się")
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun SettingSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

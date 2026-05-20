@@ -28,6 +28,7 @@ import com.google.gson.reflect.TypeToken
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
@@ -50,7 +51,6 @@ object ZoneStorage {
     private const val PREFS_NAME = "safe_zones"
     private val gson = Gson()
 
-    // Klucz per-dziecko: zones_<child_device_id>
     private fun key(childDeviceId: String) = "zones_$childDeviceId"
 
     fun saveZones(context: Context, childDeviceId: String, zones: List<SafeZone>) {
@@ -105,6 +105,19 @@ fun circlePoints(center: GeoPoint, radiusMeters: Double, points: Int = 64): List
     }
 }
 
+// --- Źródła kafelków dla stylów mapy ---
+private val TILE_SOURCE_SATELLITE = XYTileSource(
+    "Esri WorldImagery",
+    0, 19, 256, ".jpg",
+    arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/")
+)
+
+private val TILE_SOURCE_TERRAIN = XYTileSource(
+    "OpenTopoMap",
+    0, 17, 256, ".png",
+    arrayOf("https://tile.opentopomap.org/")
+)
+
 data class ChildLocation(
     val child: ChildData,
     val location: LocationResponse
@@ -118,6 +131,7 @@ fun MapScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val currentSettings = SettingsManager.settings  // Reaktywny odczyt stylu mapy
 
     var childLocations by remember { mutableStateOf<List<ChildLocation>>(emptyList()) }
     var historyPoints by remember { mutableStateOf<List<LocationResponse>>(emptyList()) }
@@ -127,7 +141,6 @@ fun MapScreen(
     var showHistory by remember { mutableStateOf(false) }
     var selectedHours by remember { mutableIntStateOf(24) }
 
-    // Strefy tylko dla konkretnego dziecka (null gdy mapa wszystkich)
     var safeZones by remember {
         mutableStateOf(
             if (selectedChild != null) ZoneStorage.loadZones(context, selectedChild.code)
@@ -135,7 +148,6 @@ fun MapScreen(
         )
     }
 
-    // Dialog dodawania strefy
     var showAddZoneDialog by remember { mutableStateOf(false) }
     var pendingZonePoint by remember { mutableStateOf<GeoPoint?>(null) }
     var newZoneName by remember { mutableStateOf("") }
@@ -144,7 +156,6 @@ fun MapScreen(
     val hourOptions = listOf(1, 6, 24, 48)
     val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
 
-    // Ikona dla strefy — inna niż dziecko
     val zoneIcon: Drawable? = remember {
         ContextCompat.getDrawable(context, android.R.drawable.ic_menu_compass)
     }
@@ -157,11 +168,7 @@ fun MapScreen(
     LaunchedEffect(selectedChild) {
         isLoading = true
         errorMessage = null
-
-        // Przeładuj strefy gdy zmienia się wybrane dziecko
-        safeZones = if (selectedChild != null)
-            ZoneStorage.loadZones(context, selectedChild.code)
-        else emptyList()
+        safeZones = if (selectedChild != null) ZoneStorage.loadZones(context, selectedChild.code) else emptyList()
 
         val toFetch = if (selectedChild != null) listOf(selectedChild) else childrenList
         val results = mutableListOf<ChildLocation>()
@@ -170,22 +177,6 @@ fun MapScreen(
                 val loc = RetrofitInstance.api.getLatestLocation(child.code)
                 results.add(ChildLocation(child, loc))
             } catch (_: Exception) {}
-        }
-
-        // Sprawdź strefy — tylko dla konkretnego dziecka
-        if (selectedChild != null) {
-            val childZones = ZoneStorage.loadZones(context, selectedChild.code)
-            results.forEach { childLoc ->
-                childZones.forEach { zone ->
-                    val dist = distanceMeters(
-                        childLoc.location.latitude, childLoc.location.longitude,
-                        zone.latitude, zone.longitude
-                    )
-                    if (dist > zone.radiusMeters) {
-                        showGeofenceNotification(context, childLoc.child.name, zone.name, dist)
-                    }
-                }
-            }
         }
 
         childLocations = results
@@ -205,20 +196,14 @@ fun MapScreen(
         }
     }
 
-    // Dialog dodawania strefy
     if (showAddZoneDialog && pendingZonePoint != null) {
         AlertDialog(
-            onDismissRequest = {
-                showAddZoneDialog = false
-                newZoneName = ""
-                newZoneRadius = "500"
-            },
+            onDismissRequest = { showAddZoneDialog = false; newZoneName = ""; newZoneRadius = "500" },
             title = { Text("Dodaj strefę dla ${selectedChild?.name}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Lokalizacja: ${String.format("%.4f", pendingZonePoint!!.latitude)}, " +
-                                "${String.format("%.4f", pendingZonePoint!!.longitude)}",
+                        "Lokalizacja: ${String.format("%.4f", pendingZonePoint!!.latitude)}, ${String.format("%.4f", pendingZonePoint!!.longitude)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary
                     )
@@ -254,19 +239,15 @@ fun MapScreen(
                             safeZones = updated
                             ZoneStorage.saveZones(context, selectedChild.code, updated)
                         }
-                        showAddZoneDialog = false
-                        newZoneName = ""
-                        newZoneRadius = "500"
+                        showAddZoneDialog = false; newZoneName = ""; newZoneRadius = "500"
                     },
                     enabled = newZoneName.isNotBlank()
                 ) { Text("Dodaj") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showAddZoneDialog = false
-                    newZoneName = ""
-                    newZoneRadius = "500"
-                }) { Text("Anuluj") }
+                TextButton(onClick = { showAddZoneDialog = false; newZoneName = ""; newZoneRadius = "500" }) {
+                    Text("Anuluj")
+                }
             }
         )
     }
@@ -286,8 +267,7 @@ fun MapScreen(
                             Icon(
                                 Icons.Filled.Home,
                                 contentDescription = "Historia trasy",
-                                tint = if (showHistory) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface
+                                tint = if (showHistory) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -295,53 +275,47 @@ fun MapScreen(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (errorMessage != null && childLocations.isEmpty()) {
-                Text(
-                    text = errorMessage!!,
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.error
-                )
+                Text(text = errorMessage!!, modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.error)
             } else {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
                         MapView(ctx).apply {
-                            setTileSource(TileSourceFactory.MAPNIK)
+                            // Styl mapy z ustawień
+                            setTileSource(when (currentSettings.mapStyle) {
+                                MapStyle.TERRAIN -> TILE_SOURCE_TERRAIN
+                                MapStyle.STANDARD -> TileSourceFactory.MAPNIK
+                            })
                             setMultiTouchControls(true)
                         }
                     },
                     update = { mapView ->
+                        // Aktualizuj styl mapy gdy zmieni się ustawienie
+                        mapView.setTileSource(when (currentSettings.mapStyle) {
+                            MapStyle.TERRAIN -> TILE_SOURCE_TERRAIN
+                            MapStyle.STANDARD -> TileSourceFactory.MAPNIK
+                        })
+
                         mapView.overlays.clear()
 
-                        // Dodaj MapEventsOverlay jako pierwszy overlay
                         val eventsOverlay = MapEventsOverlay(object : MapEventsReceiver {
                             override fun singleTapConfirmedHelper(p: GeoPoint?) = false
                             override fun longPressHelper(p: GeoPoint?): Boolean {
-                                // Tylko na mapie konkretnego dziecka
                                 if (selectedChild != null) {
-                                    p?.let {
-                                        pendingZonePoint = it
-                                        showAddZoneDialog = true
-                                    }
+                                    p?.let { pendingZonePoint = it; showAddZoneDialog = true }
                                 }
                                 return true
                             }
                         })
                         mapView.overlays.add(eventsOverlay)
 
-                        // Rysuj strefy tylko dla konkretnego dziecka
                         if (selectedChild != null) {
                             safeZones.forEach { zone ->
                                 val center = GeoPoint(zone.latitude, zone.longitude)
-
-                                // Okrąg strefy
                                 val polygon = Polygon(mapView).apply {
                                     points = circlePoints(center, zone.radiusMeters)
                                     fillPaint.color = (primaryColor and 0x00FFFFFF) or 0x33000000
@@ -352,7 +326,6 @@ fun MapScreen(
                                 }
                                 mapView.overlays.add(polygon)
 
-                                // Marker centrum strefy — inna ikona niż dziecko
                                 val zoneMarker = Marker(mapView).apply {
                                     position = center
                                     title = "🏠 ${zone.name}"
@@ -364,7 +337,6 @@ fun MapScreen(
                             }
                         }
 
-                        // Historia trasy
                         if (historyPoints.size >= 2) {
                             val polyline = Polyline(mapView).apply {
                                 outlinePaint.color = primaryColor
@@ -372,7 +344,6 @@ fun MapScreen(
                                 setPoints(historyPoints.map { GeoPoint(it.latitude, it.longitude) })
                             }
                             mapView.overlays.add(polyline)
-
                             historyPoints.dropLast(1).forEachIndexed { index, point ->
                                 val marker = Marker(mapView).apply {
                                     position = GeoPoint(point.latitude, point.longitude)
@@ -384,24 +355,13 @@ fun MapScreen(
                             }
                         }
 
-                        // Aktualna lokalizacja dzieci
                         childLocations.forEachIndexed { index, childLoc ->
                             val geoPoint = GeoPoint(childLoc.location.latitude, childLoc.location.longitude)
-                            if (index == 0) {
-                                mapView.controller.setZoom(15.0)
-                                mapView.controller.setCenter(geoPoint)
-                            }
+                            if (index == 0) { mapView.controller.setZoom(15.0); mapView.controller.setCenter(geoPoint) }
 
-                            // Status stref w snippecie markera dziecka
-                            val childZones = if (selectedChild != null)
-                                ZoneStorage.loadZones(context, childLoc.child.code)
-                            else emptyList()
-
+                            val childZones = if (selectedChild != null) ZoneStorage.loadZones(context, childLoc.child.code) else emptyList()
                             val statusText = childZones.joinToString("\n") { zone ->
-                                val dist = distanceMeters(
-                                    childLoc.location.latitude, childLoc.location.longitude,
-                                    zone.latitude, zone.longitude
-                                )
+                                val dist = distanceMeters(childLoc.location.latitude, childLoc.location.longitude, zone.latitude, zone.longitude)
                                 "${if (dist <= zone.radiusMeters) "✅" else "⚠️"} ${zone.name}: ${dist.toInt()} m"
                             }
 
@@ -423,15 +383,10 @@ fun MapScreen(
                     }
                 )
 
-                // Hint gdy brak stref (tylko na mapie konkretnego dziecka)
                 if (selectedChild != null && safeZones.isEmpty()) {
                     Card(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
+                        modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                     ) {
                         Text(
                             text = "💡 Przytrzymaj punkt na mapie aby dodać strefę dla ${selectedChild.name}",
@@ -441,27 +396,15 @@ fun MapScreen(
                     }
                 }
 
-                // Lista stref z opcją usunięcia (tylko dla konkretnego dziecka)
                 if (selectedChild != null && safeZones.isNotEmpty()) {
                     Card(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                        )
+                        modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
                     ) {
                         Column(modifier = Modifier.padding(8.dp)) {
-                            Text(
-                                "Strefy ${selectedChild.name}:",
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
+                            Text("Strefy ${selectedChild.name}:", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 4.dp))
                             safeZones.forEach { zone ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                     Text(
                                         text = "🏠 ${zone.name} (${zone.radiusMeters.toInt()} m)",
                                         style = MaterialTheme.typography.bodySmall,
@@ -472,11 +415,7 @@ fun MapScreen(
                                         safeZones = updated
                                         ZoneStorage.saveZones(context, selectedChild.code, updated)
                                     }) {
-                                        Text(
-                                            "Usuń",
-                                            color = MaterialTheme.colorScheme.error,
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
+                                        Text("Usuń", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }
@@ -484,115 +423,62 @@ fun MapScreen(
                     }
                 }
 
-                // Historia — selector godzin
                 if (showHistory && selectedChild != null) {
                     Card(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = if (childLocations.isNotEmpty()) 80.dp else 8.dp)
                             .padding(horizontal = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                        )
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
                     ) {
                         if (isHistoryLoading) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                                 Text("Ładowanie historii...", style = MaterialTheme.typography.bodySmall)
                             }
                         } else {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text("Historia:", style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(end = 4.dp))
+                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Historia:", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 4.dp))
                                 hourOptions.forEach { h ->
-                                    FilterChip(
-                                        selected = selectedHours == h,
-                                        onClick = { selectedHours = h },
-                                        label = { Text("${h}h") }
-                                    )
+                                    FilterChip(selected = selectedHours == h, onClick = { selectedHours = h }, label = { Text("${h}h") })
                                 }
                                 if (historyPoints.isNotEmpty()) {
-                                    Text(
-                                        text = "${historyPoints.size} pkt",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.padding(start = 4.dp)
-                                    )
+                                    Text("${historyPoints.size} pkt", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 4.dp))
                                 }
                             }
                         }
                     }
                 }
 
-                // Karty baterii i statusu stref na dole
                 if (childLocations.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
+                    Column(modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         childLocations.forEach { childLoc ->
-                            val childZones = if (selectedChild != null)
-                                ZoneStorage.loadZones(context, childLoc.child.code)
-                            else emptyList()
-
+                            val childZones = if (selectedChild != null) ZoneStorage.loadZones(context, childLoc.child.code) else emptyList()
                             val zoneStatuses = childZones.map { zone ->
-                                val dist = distanceMeters(
-                                    childLoc.location.latitude, childLoc.location.longitude,
-                                    zone.latitude, zone.longitude
-                                )
+                                val dist = distanceMeters(childLoc.location.latitude, childLoc.location.longitude, zone.latitude, zone.longitude)
                                 Triple(zone.name, dist, dist <= zone.radiusMeters)
                             }
-
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                                )
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
                             ) {
                                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = childLoc.child.name,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text(text = childLoc.child.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                                         childLoc.location.battery_level?.let { battery ->
                                             val batteryColor = when {
                                                 battery >= 50 -> MaterialTheme.colorScheme.primary
                                                 battery >= 20 -> MaterialTheme.colorScheme.tertiary
                                                 else -> MaterialTheme.colorScheme.error
                                             }
-                                            Text(
-                                                text = "🔋 $battery%",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = batteryColor
-                                            )
-                                        } ?: Text(
-                                            text = "Brak danych baterii",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
+                                            Text(text = "🔋 $battery%", style = MaterialTheme.typography.bodyMedium, color = batteryColor)
+                                        } ?: Text(text = "Brak danych baterii", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                                     }
                                     zoneStatuses.forEach { (name, dist, inZone) ->
                                         Text(
                                             text = "${if (inZone) "✅" else "⚠️"} $name: ${dist.toInt()} m",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = if (inZone) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.error
+                                            color = if (inZone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                         )
                                     }
                                 }

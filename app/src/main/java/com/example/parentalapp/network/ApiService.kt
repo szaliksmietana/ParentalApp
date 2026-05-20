@@ -202,7 +202,6 @@ interface FamilyGuardApi {
     @GET("sos/pending")
     suspend fun getPendingSos(@Query("device_id") deviceId: String): List<SosAlertResponse>
 
-    // Potwierdzenie (odwołanie) alarmu SOS
     @POST("sos/{sos_id}/acknowledge")
     suspend fun acknowledgeSos(
         @Path("sos_id") sosId: String,

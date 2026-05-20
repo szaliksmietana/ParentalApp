@@ -35,6 +35,8 @@ fun ChatScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val currentSettings = SettingsManager.settings  // Reaktywny odczyt flagi powiadomień
+
     var currentMessage by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<MessageResponse>>(emptyList()) }
     var expanded by remember { mutableStateOf(false) }
@@ -56,7 +58,8 @@ fun ChatScreen(
                         msg.sender_device_id != guardianDeviceId && msg.id !in seenMessageIds
                     }
 
-                    if (seenMessageIds.isNotEmpty()) {
+                    // Powiadomienia tylko jeśli flaga włączona w ustawieniach
+                    if (seenMessageIds.isNotEmpty() && currentSettings.chatNotificationsEnabled) {
                         freshMessages.forEach { msg ->
                             showMessageNotification(context, child.name, msg.content)
                         }
@@ -80,9 +83,7 @@ fun ChatScreen(
     }
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
-        }
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
     Scaffold(
