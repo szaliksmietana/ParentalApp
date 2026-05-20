@@ -30,6 +30,8 @@ fun ChatScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val currentSettings = ChildSettingsManager.settings // Reaktywny odczyt flagi powiadomień
+
     var currentMessage by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<MessageResponse>>(emptyList()) }
     var guardianDeviceId by remember { mutableStateOf<String?>(null) }
@@ -55,7 +57,8 @@ fun ChatScreen(
                     msg.sender_device_id != childDeviceId && msg.id !in seenMessageIds
                 }
 
-                if (seenMessageIds.isNotEmpty()) {
+                // Powiadomienia tylko jeśli flaga włączona
+                if (seenMessageIds.isNotEmpty() && currentSettings.messageNotificationsEnabled) {
                     freshFromGuardian.forEach { msg ->
                         NotificationHelper.showMessageNotification(context, msg.content)
                     }
@@ -82,9 +85,7 @@ fun ChatScreen(
     }
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
-        }
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
     Scaffold(
@@ -100,9 +101,7 @@ fun ChatScreen(
         },
         bottomBar = {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
@@ -119,11 +118,9 @@ fun ChatScreen(
                         val guardian = guardianDeviceId ?: return@IconButton
                         val content = currentMessage.trim()
                         if (content.isBlank() || isSending) return@IconButton
-
                         isSending = true
                         val optimisticContent = currentMessage
                         currentMessage = ""
-
                         scope.launch {
                             try {
                                 val sent = RetrofitInstance.api.sendMessage(
@@ -150,11 +147,7 @@ fun ChatScreen(
                     enabled = guardianDeviceId != null && !isSending
                 ) {
                     if (isSending) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                     } else {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Wyślij", tint = Color.White)
                     }
@@ -164,18 +157,12 @@ fun ChatScreen(
     ) { paddingValues ->
         when {
             isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             }
             guardianDeviceId == null -> {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                     Text(
                         "Brak parowania z rodzicem.\nSparuj urządzenie najpierw.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -186,10 +173,7 @@ fun ChatScreen(
             else -> {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 16.dp)
                 ) {
@@ -224,19 +208,10 @@ fun ChildChatBubble(
             Text(
                 text = content,
                 color = textColor,
-                modifier = Modifier
-                    .background(backgroundColor, RoundedCornerShape(16.dp))
-                    .padding(12.dp)
+                modifier = Modifier.background(backgroundColor, RoundedCornerShape(16.dp)).padding(12.dp)
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = time,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(text = time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 if (isFromChild) {
                     Text(
                         text = if (isRead) "✓✓" else "✓",
