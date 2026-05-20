@@ -9,7 +9,6 @@ import android.os.Looper
 import android.util.Log
 import com.example.parentalapp.network.LocationCreateRequest
 import com.example.parentalapp.network.RetrofitInstance
-import com.example.parentalapp.ui.ChildSettingsManager
 import com.example.parentalapp.ui.NotificationHelper
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -85,7 +84,6 @@ class LocationTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        ChildSettingsManager.load(this) // Wczytaj ustawienia przy starcie serwisu
         NotificationHelper.createChannels(this)
         startForeground(1, NotificationHelper.buildLocationForegroundNotification(this))
         startLocationUpdates()
@@ -93,12 +91,8 @@ class LocationTrackingService : Service() {
     }
 
     private fun startLocationUpdates() {
-        // Interwał GPS z ustawień
-        val intervalMs = ChildSettingsManager.settings.gpsInterval.ms
-        val minIntervalMs = (intervalMs * 0.66).toLong() // min = 2/3 głównego interwału
-
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
-            .setMinUpdateIntervalMillis(minIntervalMs)
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15000)
+            .setMinUpdateIntervalMillis(10000)
             .build()
 
         try {
@@ -107,7 +101,6 @@ class LocationTrackingService : Service() {
                 locationCallback,
                 Looper.getMainLooper()
             )
-            Log.d("LocationService", "GPS interwał: ${intervalMs / 1000}s")
         } catch (e: SecurityException) {
             Log.e("LocationService", "Brak uprawnień: ${e.message}")
         }
